@@ -125,14 +125,7 @@ def find_latest_file(root_dir, file_pattern, additional_search_dirs=None):
         write_log(f"Found {len(all_matching_files)} matching files in total", "CYAN")
         
         # If we found matching files, determine the best one to use
-        if all_matching_files:
-            # Logging all found files to debug
-            write_log("All matching files:", "CYAN")
-            for idx, file_path in enumerate(all_matching_files):
-                filename = os.path.basename(file_path)
-                version = get_version_number(filename)
-                write_log(f"  {idx+1}. {filename} (Version: {version})", "WHITE")
-            
+        if all_matching_files:           
             # First try to find the highest version number
             highest_version = -1
             highest_version_file = None
