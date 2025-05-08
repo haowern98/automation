@@ -1,0 +1,141 @@
+# Function to process AD data by querying computer objects
+function Process-ADData {
+    param (
+        [string]$LDAPFilter = "(&(&(objectCategory=computer)(objectClass=computer)(&(cn=SG*)(!cn=SGD*)(!cn=SGG*)(!cn=SGSAH*)(!cn=SGSI*)(!cn=SGSR*)(!cn=SGT*))))",
+        [string]$SearchBase = "OU=SCO,OU=EXP,OU=SG,OU=Prod,OU=Computers,OU=NGWS,DC=kul-dc,DC=dhl,DC=com",
+        [string]$OutputFilePath = "ad_results.json"
+    )
+    
+    Write-Log "Starting AD data processing with LDAP filter: $LDAPFilter" -Color Yellow
+    $startTime = Get-Date
+    
+    try {
+        # Import the Active Directory module
+        Write-Log "Importing Active Directory module..." -Color Cyan
+        Import-Module ActiveDirectory -ErrorAction Stop
+        
+        # Execute the query to get the list of computer objects
+        Write-Log "Executing AD query with search base: $SearchBase" -Color Cyan
+        $computers = Get-ADComputer -SearchBase $SearchBase -LDAPFilter $LDAPFilter -Property Name
+        
+        # Extract just the computer names from the objects
+        $adComputers = @()
+        foreach ($computer in $computers) {
+            $adComputers += $computer.Name
+        }
+        
+        # Save results to JSON file if path provided
+        if (-not [string]::IsNullOrEmpty($OutputFilePath)) {
+            Write-Log "Saving results to: $OutputFilePath" -Color Cyan
+            $adComputers | ConvertTo-Json | Set-Content -Path $OutputFilePath -Encoding UTF8
+        }
+        
+        $endTime = Get-Date
+        $duration = $endTime - $startTime
+        Write-Log "AD data processing complete - $($adComputers.Count) entries found in $($duration.TotalSeconds) seconds" -Color Green
+        
+        # Display sample of results
+        if ($adComputers.Count -gt 0) {
+            Write-Log "Sample of extracted computer names:" -Color Cyan
+            $sampleSize = [Math]::Min(5, $adComputers.Count)
+            $sample = $adComputers | Select-Object -First $sampleSize
+            foreach ($name in $sample) {
+                Write-Log "  - $name" -Color White
+            }
+            
+            if ($adComputers.Count -gt 5) {
+                Write-Log "  ... and $($adComputers.Count - 5) more" -Color White
+            }
+        } else {
+            Write-Log "No computer objects found matching the criteria" -Color Yellow
+        }
+        
+        # Return the array of computer names
+        return $adComputers
+    }
+    catch {
+        Write-Log "Error processing AD data: $_" -Color Red
+        Write-Log "Please check if the Active Directory module is installed and if you have the necessary permissions." -Color Red
+        
+        # On error, create an empty JSON file to avoid further errors
+        if (-not [string]::IsNullOrEmpty($OutputFilePath)) {
+            @() | ConvertTo-Json | Set-Content -Path $OutputFilePath -Encoding UTF8
+            Write-Log "Created empty results file at: $OutputFilePath" -Color Yellow
+        }
+        
+        # Return empty array on error
+        return @()
+    }
+}
+
+# Function to compare GSN and AD data sets and output to console
+function Compare-GSNwithAD {
+    param (
+        [array]$GSNEntries,
+        [array]$ADEntries,
+        [string]$OutputFilePath = "ad_comparison_results.json"
+    )
+    
+    Write-Log "`n=========================================" -Color Yellow
+    Write-Log "COMPARING GSN AND AD ENTRIES" -Color Yellow
+    Write-Log "=========================================" -Color Yellow
+    
+    # Find entries in GSN but not in AD
+    $missingInAD = $GSNEntries | Where-Object { $_ -notin $ADEntries }
+    
+    # Find entries in AD but not in GSN
+    $missingInGSN = $ADEntries | Where-Object { $_ -notin $GSNEntries }
+    
+    # Report GSN entries not in AD
+    if ($missingInAD.Count -gt 0) {
+        Write-Log "`nIn GSN but not in AD:" -Color Magenta
+        foreach ($item in ($missingInAD | Sort-Object)) {
+            Write-Log "  $item" -Color Magenta
+        }
+    } else {
+        Write-Log "`nNo entries in GSN that are not in AD." -Color Green
+    }
+    
+    # Report AD entries not in GSN
+    if ($missingInGSN.Count -gt 0) {
+        Write-Log "`nIn AD but not in GSN:" -Color Cyan
+        foreach ($item in ($missingInGSN | Sort-Object)) {
+            Write-Log "  $item" -Color Cyan
+        }
+    } else {
+        Write-Log "`nNo entries in AD that are not in GSN." -Color Green
+    }
+    
+    # Create summary of comparison results
+    Write-Log "`nComparison Summary:" -Color Yellow
+    Write-Log "- Total GSN entries: $($GSNEntries.Count)" -Color White
+    Write-Log "- Total AD entries: $($ADEntries.Count)" -Color White
+    Write-Log "- GSN entries not in AD: $($missingInAD.Count)" -Color Magenta
+    Write-Log "- AD entries not in GSN: $($missingInGSN.Count)" -Color Cyan
+    Write-Log "=========================================" -Color Yellow
+    
+    # CRITICAL: Ensure we're returning arrays of strings, not single strings
+    $resultMissingInAD = @()
+    foreach ($item in $missingInAD) {
+        $resultMissingInAD += [string]$item
+    }
+    
+    $resultMissingInGSN = @()
+    foreach ($item in $missingInGSN) {
+        $resultMissingInGSN += [string]$item
+    }
+    
+    # Create a result object
+    $result = @{
+        MissingInAD = $resultMissingInAD
+        MissingInGSN = $resultMissingInGSN
+    }
+    
+    # Save results to JSON file if path provided
+    if (-not [string]::IsNullOrEmpty($OutputFilePath)) {
+        $result | ConvertTo-Json | Set-Content -Path $OutputFilePath -Encoding UTF8
+        Write-Log "Comparison results saved to: $OutputFilePath" -Color Cyan
+    }
+    
+    return $result
+}
