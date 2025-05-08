@@ -143,6 +143,8 @@ class ExcelUpdater:
             
         except Exception as e:
             write_log(f"Error analyzing Excel file: {str(e)}", "RED")
+            import traceback
+            write_log(traceback.format_exc(), "RED")
             return False
             
         finally:
@@ -397,12 +399,12 @@ class ExcelUpdater:
         if not date_range or not date_range.year:
             write_log("No year information available in date range object. Skipping GSN VS AD year worksheet update.", "YELLOW")
             return False
-            
+                
         year_value = date_range.year
         target_worksheet_name = f"GSN VS AD {year_value}"
-        
+            
         write_log(f"Looking for worksheet: '{target_worksheet_name}'", "CYAN")
-        
+            
         # Find the worksheet
         try:
             gsn_ad_year_worksheet = self.excel_app.workbook.Worksheets(target_worksheet_name)
@@ -410,20 +412,20 @@ class ExcelUpdater:
         except:
             write_log(f"Worksheet '{target_worksheet_name}' not found in the workbook", "YELLOW")
             return False
-            
+                
         try:
             # Find the last used row in the worksheet
             last_used_range = gsn_ad_year_worksheet.UsedRange
             last_row = last_used_range.Row + last_used_range.Rows.Count - 1
-            
+                
             write_log(f"Last used row in worksheet '{target_worksheet_name}': Row {last_row}", "CYAN")
-            
+                
             # Format date range with full month name
             date_range_text = format_date_range(date_range, full_month_name=True)
-            
+                
             # Extract date parts to determine if month header is needed
             date_parts = date_range_text.split(" ")
-            
+                
             # Extract the start date
             start_date = 0
             if "-" in date_parts[0]:
@@ -432,37 +434,37 @@ class ExcelUpdater:
             else:
                 # Format like "15 April - 17 May 2025"
                 start_date = int(date_parts[0])
-            
+                
             # Find the appropriate month name
             month_name = date_parts[1].upper() if len(date_parts) > 1 else ""
-            
+                
             # Determine if month header should be shown (when start date is less than 5)
             show_month_header = start_date < 5
-            
+                
             # Month header row position
             month_row = last_row + 2
-            
+                
             # Add month header if needed
             if show_month_header:
                 self._add_merged_header(
                     gsn_ad_year_worksheet, month_name, month_row, 1, 6, 
                     font_size=12, font_color=0xFF7B00)
-                
+                    
                 # Set position for date range header
                 start_row = month_row + 1
             else:
                 # No month header, use month row for date range
                 start_row = month_row
-            
+                
             # Add date range header
             self._add_merged_header(
                 gsn_ad_year_worksheet, f"{date_range_text} GSN VS AD", 
                 start_row, 1, 6, bg_color=0xAAAAAE, border_weight=2)
-            
+                
             # Add column headers
             second_row = start_row + 1
             headers = ["In GSN not in AD", "Remarks", "Action", "In AD not in GSN", "Remarks", "Action"]
-            
+                
             for i, header in enumerate(headers):
                 cell = gsn_ad_year_worksheet.Cells(second_row, i + 1)
                 cell.Value = header
@@ -470,51 +472,62 @@ class ExcelUpdater:
                 cell.HorizontalAlignment = -4108  # Center
                 cell.Interior.Color = 65535  # Yellow
                 cell.Borders.Weight = 2
-            
-            # Compare GSN and AD datasets
-            from processors.ad_processor import compare_gsn_with_ad
-            ad_comparison_results = compare_gsn_with_ad(gsn_entries, ad_entries)
-            missing_in_ad = ad_comparison_results["MissingInAD"]
-            missing_in_gsn = ad_comparison_results["MissingInGSN"]
-            
+                
+            # Compare GSN and AD datasets directly within this method
+            # Normalize both lists to ensure consistent comparison
+            gsn_normalized = [str(item).strip() for item in gsn_entries if item]
+            ad_normalized = [str(item).strip() for item in ad_entries if item]
+                
+            # Find entries in GSN but not in AD
+            missing_in_ad = [item for item in gsn_normalized if item not in ad_normalized]
+                
+            # Find entries in AD but not in GSN
+            missing_in_gsn = [item for item in ad_normalized if item not in gsn_normalized]
+                
+            # Sort both lists for consistent output
+            missing_in_ad.sort()
+            missing_in_gsn.sort()
+                
             # Get the max length of the two arrays
             max_length = max(len(missing_in_ad), len(missing_in_gsn))
-            
+                
             # Add the data rows
             write_log(f"Starting to add data rows. Max length: {max_length}", "CYAN")
             write_log(f"Missing in AD count: {len(missing_in_ad)}", "CYAN")
             write_log(f"Missing in GSN count: {len(missing_in_gsn)}", "CYAN")
-            
+                
             for i in range(max_length):
                 current_row = second_row + 1 + i
-                
+                    
                 # Set value in column A (In GSN not in AD)
                 if i < len(missing_in_ad):
                     value = missing_in_ad[i]
                     gsn_ad_year_worksheet.Cells(current_row, 1).NumberFormat = "@"  # Force text format
                     gsn_ad_year_worksheet.Cells(current_row, 1).Value = str(value)
-                
+                    
                 # Set value in column D (In AD not in GSN)
                 if i < len(missing_in_gsn):
                     value = missing_in_gsn[i]
                     gsn_ad_year_worksheet.Cells(current_row, 4).NumberFormat = "@"  # Force text format
                     gsn_ad_year_worksheet.Cells(current_row, 4).Value = str(value)
-                
+                    
                 # Add borders to all cells in the row
                 for col in range(1, 7):
                     gsn_ad_year_worksheet.Cells(current_row, col).Borders.Weight = 2
-            
+                
             # Auto-fit the columns
             gsn_ad_year_worksheet.Columns.AutoFit()
-            
+                
             write_log(f"Successfully updated worksheet '{target_worksheet_name}' with GSN VS AD comparison data", "GREEN")
             write_log(f"- In GSN not in AD entries: {len(missing_in_ad)}", "MAGENTA")
             write_log(f"- In AD not in GSN entries: {len(missing_in_gsn)}", "CYAN")
-            
+                
             return True
-            
+                
         except Exception as e:
             write_log(f"Error while updating GSN VS AD year worksheet: {str(e)}", "RED")
+            import traceback
+            write_log(traceback.format_exc(), "RED")
             return False
             
     def _add_comparison_section(self, worksheet, data, header_text, remarks_header, start_col, start_row):

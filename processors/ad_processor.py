@@ -55,7 +55,7 @@ def process_ad_data(ldap_filter=None, search_base=None):
         if os.path.exists(output_file):
             # Read JSON file
             try:
-                with open(output_file, 'r') as f:
+                with open(output_file, 'r', encoding='utf-8-sig') as f:
                     file_content = f.read()
                     
                     # Check if file has content
@@ -161,7 +161,7 @@ def compare_gsn_with_ad(gsn_entries, ad_entries):
         if os.path.exists(ad_results_file):
             write_log(f"AD entries is empty, trying to load from file: {ad_results_file}", "YELLOW")
             try:
-                with open(ad_results_file, 'r') as f:
+                with open(ad_results_file, 'r', encoding='utf-8-sig') as f:
                     ad_entries = json.load(f)
                 write_log(f"Loaded {len(ad_entries)} AD entries from file", "GREEN")
             except Exception as e:
