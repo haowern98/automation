@@ -18,8 +18,8 @@ ONEDRIVE_PATHS = [
 
 # Search patterns for files
 FILE_PATTERNS = {
-    'gsn': 'alm_hardware*',
-    'er': 'data*'
+    'gsn': 'alm_hardware*',  # This will match alm_hardware.xlsx, alm_hardware (48).xlsx, etc.
+    'er': 'data*'            # This will match data.xlsx, data(2).xlsx, data(45).xlsx, etc.
 }
 
 # Active Directory search parameters

@@ -15,13 +15,14 @@ from processors import process_gsn_data, process_er_data, process_ad_data
 from utils import write_log, compare_data_sets, ExcelUpdater
 from config import USER_PROFILE, SYNCED_FILE_PATH, FILE_PATTERNS, AD_SEARCH
 
-def find_latest_file(root_dir, file_pattern):
+def find_latest_file(root_dir, file_pattern, additional_search_dirs=None):
     """
     Find the latest file matching a pattern
     
     Args:
         root_dir (str): Root directory to search in
         file_pattern (str): File pattern to match
+        additional_search_dirs (list): Additional directories to search in
         
     Returns:
         str or None: Path to the latest file or None if not found
@@ -29,22 +30,147 @@ def find_latest_file(root_dir, file_pattern):
     try:
         latest_file = None
         latest_time = 0
+        all_matching_files = []
         
-        for dirpath, _, filenames in os.walk(root_dir):
-            for filename in filenames:
-                if filename.startswith(file_pattern.replace('*', '')):
-                    file_path = os.path.join(dirpath, filename)
-                    file_time = os.path.getmtime(file_path)
+        # First, expand the search to include specific paths
+        search_dirs = [root_dir]
+        if additional_search_dirs:
+            search_dirs.extend(additional_search_dirs)
+        
+        # Function to process shortcuts and get real paths
+        def resolve_shortcut(shortcut_path):
+            if shortcut_path.lower().endswith('.lnk'):
+                try:
+                    import winshell
+                    link = winshell.shortcut(shortcut_path)
+                    return link.path
+                except:
+                    write_log(f"Failed to resolve shortcut: {shortcut_path}", "YELLOW")
+                    return None
+            return shortcut_path
+        
+        # Function to check if a filename matches our pattern, including numeric variations
+        def matches_pattern(filename, pattern):
+            import re
+            
+            # Handle 'data*.xlsx' pattern - match 'data.xlsx', 'data(2).xlsx', 'data (11).xlsx', etc.
+            if pattern == 'data*':
+                return re.match(r'data\s*(\(\d+\))?\.xlsx', filename, re.IGNORECASE) is not None
+            
+            # Handle 'alm_hardware*' pattern
+            elif pattern == 'alm_hardware*':
+                return re.match(r'alm_hardware\s*(\(\d+\))?\.xlsx', filename, re.IGNORECASE) is not None
+            
+            # Default case - simple startswith check
+            else:
+                base_pattern = pattern.replace('*', '')
+                return filename.lower().startswith(base_pattern.lower())
+        
+        # Function to extract version number from filename
+        def get_version_number(filename):
+            import re
+            match = re.search(r'\((\d+)\)', filename)
+            if match:
+                return int(match.group(1))
+            return 0  # Files without a number are treated as version 0
+        
+        # Log how many directories we're searching
+        write_log(f"Searching in {len(search_dirs)} directories", "CYAN")
+        
+        for search_dir in search_dirs:
+            write_log(f"Searching in: {search_dir}", "CYAN")
+            if not os.path.exists(search_dir):
+                write_log(f"Search directory does not exist: {search_dir}", "YELLOW")
+                continue
+                
+            # First, search for exact matches to handle specific paths
+            if os.path.isfile(search_dir):
+                if matches_pattern(os.path.basename(search_dir), file_pattern):
+                    real_path = resolve_shortcut(search_dir)
+                    if real_path and os.path.exists(real_path):
+                        all_matching_files.append(real_path)
+                        write_log(f"Found direct match: {real_path}", "GREEN")
+            else:
+                try:
+                    # Search in directories, but limit depth to avoid excessive searching
+                    max_depth = 2  # Adjust this as needed
+                    base_depth = search_dir.count(os.sep)
                     
+                    for dirpath, dirs, filenames in os.walk(search_dir):
+                        # Check if we've gone too deep
+                        current_depth = dirpath.count(os.sep) - base_depth
+                        if current_depth > max_depth:
+                            del dirs[:]  # Don't descend any deeper
+                            continue
+                        
+                        for filename in filenames:
+                            # First, do a simple check before running regex
+                            if ('data' in filename.lower() or 'alm_hardware' in filename.lower()) and filename.lower().endswith('.xlsx'):
+                                # Now check with the more precise pattern
+                                if matches_pattern(filename, file_pattern):
+                                    file_path = os.path.join(dirpath, filename)
+                                    
+                                    # If it's a shortcut, resolve to actual path
+                                    real_path = resolve_shortcut(file_path)
+                                    if not real_path:
+                                        continue
+                                        
+                                    if os.path.exists(real_path):
+                                        all_matching_files.append(real_path)
+                                        file_time = os.path.getmtime(real_path)
+                                        write_log(f"Found file: {real_path} (Modified: {time.ctime(file_time)})", "GREEN")
+                except Exception as e:
+                    write_log(f"Error searching directory {search_dir}: {str(e)}", "RED")
+        
+        write_log(f"Found {len(all_matching_files)} matching files in total", "CYAN")
+        
+        # If we found matching files, determine the best one to use
+        if all_matching_files:
+            # Logging all found files to debug
+            write_log("All matching files:", "CYAN")
+            for idx, file_path in enumerate(all_matching_files):
+                filename = os.path.basename(file_path)
+                version = get_version_number(filename)
+                write_log(f"  {idx+1}. {filename} (Version: {version})", "WHITE")
+            
+            # First try to find the highest version number
+            highest_version = -1
+            highest_version_file = None
+            
+            for file_path in all_matching_files:
+                filename = os.path.basename(file_path)
+                version = get_version_number(filename)
+                
+                if version > highest_version:
+                    highest_version = version
+                    highest_version_file = file_path
+            
+            # If we found a versioned file, use it
+            if highest_version > 0 and highest_version_file:
+                latest_file = highest_version_file
+                write_log(f"Selected highest version file: {latest_file} (Version: {highest_version})", "GREEN")
+            else:
+                # Otherwise fall back to the most recently modified file
+                for file_path in all_matching_files:
+                    file_time = os.path.getmtime(file_path)
                     if file_time > latest_time:
                         latest_time = file_time
                         latest_file = file_path
+                
+                write_log(f"Selected most recently modified file: {latest_file}", "GREEN")
         
+        if not latest_file:
+            write_log(f"No files found matching pattern '{file_pattern}'", "YELLOW")
+        else:
+            write_log(f"Latest file found: {latest_file}", "GREEN")
+            
         return latest_file
     except Exception as e:
         write_log(f"Error finding latest file: {str(e)}", "RED")
+        import traceback
+        write_log(traceback.format_exc(), "RED")
         return None
-
+        
 def main():
     """Main function to run the SharePoint automation"""
     # Record the start time
@@ -64,15 +190,24 @@ def main():
         
         # Define the root directories to start the search
         root_dir = os.path.join(USER_PROFILE)
-        root_dir2 = os.path.join(USER_PROFILE)
+        
+        # Common locations to search for Excel files
+        common_locations = [
+            os.path.join(USER_PROFILE, "Downloads"),
+            os.path.join(USER_PROFILE, "Desktop"),
+            os.path.join(USER_PROFILE, "Documents"),
+            os.path.join(USER_PROFILE, "OneDrive"),
+            os.path.join(USER_PROFILE, "OneDrive - Deutsche Post DHL"),
+            os.path.join(USER_PROFILE, "AppData", "Roaming", "Microsoft", "Windows", "Recent")
+        ]
         
         # Use concurrent futures to search for files in parallel
         with concurrent.futures.ThreadPoolExecutor() as executor:
             # Start concurrent file search jobs
             write_log("Starting concurrent file search operations...", "YELLOW")
             
-            alm_file_future = executor.submit(find_latest_file, root_dir, FILE_PATTERNS['gsn'])
-            data_file_future = executor.submit(find_latest_file, root_dir2, FILE_PATTERNS['er'])
+            alm_file_future = executor.submit(find_latest_file, root_dir, FILE_PATTERNS['gsn'], common_locations)
+            data_file_future = executor.submit(find_latest_file, root_dir, FILE_PATTERNS['er'], common_locations)
             sharepoint_exists_future = executor.submit(os.path.exists, SYNCED_FILE_PATH)
             
             # Wait for all file search jobs to complete
@@ -84,12 +219,20 @@ def main():
         
         # Validate required files exist
         if not excel_file_path:
-            write_log(f"No files found matching pattern '{FILE_PATTERNS['gsn']}' in {root_dir}", "RED")
-            return
+            write_log(f"No files found matching pattern '{FILE_PATTERNS['gsn']}'. Please specify the file path manually.", "RED")
+            # Allow manual input as fallback
+            excel_file_path = input("Please enter the full path to the GSN Excel file (e.g., C:\\path\\to\\alm_hardware.xlsx): ").strip('"')
+            if not os.path.exists(excel_file_path):
+                write_log("Invalid file path. Exiting.", "RED")
+                return
         
         if not data_file_path:
-            write_log(f"No files found matching pattern '{FILE_PATTERNS['er']}' in {root_dir2}", "RED")
-            return
+            write_log(f"No files found matching pattern '{FILE_PATTERNS['er']}'. Please specify the file path manually.", "RED")
+            # Allow manual input as fallback
+            data_file_path = input("Please enter the full path to the ER data file (e.g., C:\\path\\to\\data.xlsx): ").strip('"')
+            if not os.path.exists(data_file_path):
+                write_log("Invalid file path. Exiting.", "RED")
+                return
         
         write_log(f"Found latest files: {excel_file_path} and {data_file_path}", "GREEN")
         
