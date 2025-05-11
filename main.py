@@ -13,7 +13,61 @@ from datetime import datetime
 from gui import show_date_range_selection
 from processors import process_gsn_data, process_er_data, process_ad_data
 from utils import write_log, compare_data_sets, ExcelUpdater
+from utils.excel_functions import ExcelApplication
 from config import USER_PROFILE, SYNCED_FILE_PATH, FILE_PATTERNS, AD_SEARCH
+
+def check_excel_processes(terminate_all=False):
+    """
+    Check for running Excel processes
+    
+    Args:
+        terminate_all (bool): Whether to terminate all Excel processes
+    
+    Returns:
+        int: Number of Excel processes found
+    """
+    try:
+        import psutil
+        excel_processes = []
+        
+        for proc in psutil.process_iter(['pid', 'name']):
+            if 'excel' in proc.info['name'].lower():
+                excel_processes.append(proc)
+        
+        if excel_processes:
+            write_log(f"Found {len(excel_processes)} Excel processes running", "YELLOW")
+            
+            if terminate_all:
+                for proc in excel_processes:
+                    try:
+                        proc.terminate()
+                        write_log(f"Terminated Excel process: {proc.info['pid']}", "YELLOW")
+                    except:
+                        pass
+                write_log("Attempted to terminate all Excel processes", "YELLOW")
+        else:
+            write_log("No Excel processes found running", "GREEN")
+            
+        return len(excel_processes)
+    except Exception as e:
+        write_log(f"Error checking Excel processes: {str(e)}", "RED")
+        return 0
+
+def warm_up_excel():
+    """Warm up Excel to ensure it's ready for automation"""
+    write_log("Warming up Excel...", "YELLOW")
+    try:
+        excel_app = ExcelApplication()
+        # Create a dummy workbook to ensure Excel is responsive
+        temp_wb = excel_app.excel.Workbooks.Add()
+        time.sleep(1)  # Short delay
+        temp_wb.Close(SaveChanges=False)
+        excel_app.close()
+        write_log("Excel warm-up successful", "GREEN")
+        return True
+    except Exception as e:
+        write_log(f"Excel warm-up failed: {str(e)}", "RED")
+        return False
 
 def find_latest_file(root_dir, file_pattern, additional_search_dirs=None):
     """
@@ -125,7 +179,14 @@ def find_latest_file(root_dir, file_pattern, additional_search_dirs=None):
         write_log(f"Found {len(all_matching_files)} matching files in total", "CYAN")
         
         # If we found matching files, determine the best one to use
-        if all_matching_files:           
+        if all_matching_files:
+            # Logging all found files to debug
+            write_log("All matching files:", "CYAN")
+            for idx, file_path in enumerate(all_matching_files):
+                filename = os.path.basename(file_path)
+                version = get_version_number(filename)
+                write_log(f"  {idx+1}. {filename} (Version: {version})", "WHITE")
+            
             # First try to find the highest version number
             highest_version = -1
             highest_version_file = None
@@ -171,6 +232,12 @@ def main():
     write_log("Starting SharePoint file access script (OneDrive sync method)", "YELLOW")
 
     try:
+        # Check for Excel processes
+        check_excel_processes()
+        
+        # Warm up Excel
+        warm_up_excel()
+        
         # First, get the date range from the user
         write_log("Prompting for date range...", "YELLOW")
         date_range = show_date_range_selection()

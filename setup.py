@@ -17,7 +17,8 @@ install_requires=[
     "ldap3>=2.9.1",
     "PyQt5>=5.15.4",
     "pyad>=0.6.0",
-    "winshell>=0.6.0"  # Added this line
+    "winshell>=0.6.0", 
+    "psutil>=5.9.0"  # Added this line
 ],
     entry_points={
         'console_scripts': [
