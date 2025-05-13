@@ -96,6 +96,7 @@ class ExcelUpdater:
         """
         self.file_path = file_path
         self.excel_app = ExcelApplication()
+        self.workbook = None
         
     def analyze_excel_file(self, gsn_entries, er_entries, ad_entries, date_range, 
                            missing_in_er, missing_in_gsn, filtered_hostnames2, er_serial_number):
@@ -116,7 +117,10 @@ class ExcelUpdater:
             bool: Success status
         """
         if not self.excel_app.open_workbook(self.file_path):
+            write_log(f"Failed to open Excel file: {self.file_path}", "RED")
             return False
+        
+        self.workbook = self.excel_app.workbook
             
         try:
             # Display worksheet information

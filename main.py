@@ -19,6 +19,7 @@ from gui.date_selector import DateRangeResult  # Import directly from date_selec
 from processors import process_gsn_data, process_er_data, process_ad_data
 from utils import write_log, compare_data_sets, ExcelUpdater
 from utils.excel_functions import ExcelApplication
+from processors.er_processor_alt import process_er_data_alt
 from config import USER_PROFILE, SYNCED_FILE_PATH, FILE_PATTERNS, AD_SEARCH
 
 def is_weekend(date=None):
