@@ -1,20 +1,195 @@
 #!/usr/bin/env python3
 """
 SharePoint Automation - Main Script
-Converted from PowerShell to Python
+Enhanced with automated scheduling logic and 30-second GUI timeout
 """
 import os
 import sys
 import time
 import concurrent.futures
-from datetime import datetime
+import calendar
+import argparse
+from datetime import datetime, timedelta
+from PyQt5.QtCore import QTimer, Qt
+from PyQt5.QtWidgets import QApplication
 
 # Import modules from our package
-from gui import show_date_range_selection
+from gui import show_date_range_selection, parse_date_range_string
+from gui.date_selector import DateRangeResult  # Import directly from date_selector
 from processors import process_gsn_data, process_er_data, process_ad_data
 from utils import write_log, compare_data_sets, ExcelUpdater
 from utils.excel_functions import ExcelApplication
 from config import USER_PROFILE, SYNCED_FILE_PATH, FILE_PATTERNS, AD_SEARCH
+
+def is_weekend(date=None):
+    """
+    Check if the given date is a weekend (Saturday or Sunday)
+    
+    Args:
+        date (datetime.date, optional): Date to check, defaults to current date
+        
+    Returns:
+        bool: True if it's a weekend
+    """
+    if date is None:
+        date = datetime(2025, 7, 31).date() 
+    
+    # 5 represents Saturday, 6 represents Sunday in the weekday() function
+    return date.weekday() >= 5
+
+def is_last_day_of_month(date=None):
+    """
+    Check if the given date is the last day of the month
+    
+    Args:
+        date (datetime.date, optional): Date to check, defaults to current date
+        
+    Returns:
+        bool: True if it's the last day of the month
+    """
+    if date is None:
+        date = datetime(2025, 7, 31).date()   
+    
+    # Get the last day of the current month
+    last_day = calendar.monthrange(date.year, date.month)[1]
+    return date.day == last_day
+
+def is_friday(date=None):
+    """
+    Check if the given date is a Friday
+    
+    Args:
+        date (datetime.date, optional): Date to check, defaults to current date
+        
+    Returns:
+        bool: True if it's a Friday
+    """
+    if date is None:
+        date = datetime(2025, 7, 31).date()   
+        write_log(f"DEBUG - Date used: {date}", "YELLOW")
+        write_log(f"DEBUG - Is Friday: {is_friday(date)}", "YELLOW")
+        write_log(f"DEBUG - Is last day of month: {is_last_day_of_month(date)}", "YELLOW")
+    
+    # 4 represents Friday (0 is Monday in the weekday() function)
+    return date.weekday() == 4
+
+def get_monday_of_same_week(date=None):
+    """
+    Get the Monday of the same week as the given date
+    
+    Args:
+        date (datetime.date, optional): Reference date, defaults to current date
+        
+    Returns:
+        datetime.date: Date of the Monday of the same week
+    """
+    if date is None:
+        date = datetime(2025, 7, 31).date()   
+    
+    # Calculate the number of days to subtract to get to Monday (weekday 0)
+    days_to_subtract = date.weekday()
+    
+    # Return the Monday date
+    return date - timedelta(days=days_to_subtract)
+
+def get_date_range_based_on_day():
+    """
+    Automatically determine date range based on current day
+    
+    Returns:
+        DateRangeResult: Date range object with start and end dates
+    """
+    current_date = datetime(2025, 7, 31).date()   
+    
+    # If it's the last day of the month
+    if is_last_day_of_month(current_date):
+        end_date = current_date
+        # Get Monday of the same week
+        start_date = get_monday_of_same_week(current_date)
+        
+        # If Monday is in a different month, use the first day of the current month
+        if start_date.month != end_date.month:
+            start_date = datetime(end_date.year, end_date.month, 1).date()
+    
+    # If it's a Friday
+    elif is_friday(current_date):
+        end_date = current_date
+        # Get Monday of the same week
+        start_date = get_monday_of_same_week(current_date)
+        
+        # If Monday is in a different month, use the first day of the current month
+        if start_date.month != end_date.month:
+            start_date = datetime(end_date.year, end_date.month, 1).date()
+    
+    # If it's neither Friday nor last day of month, return None
+    else:
+        return None
+    
+    # Create a DateRangeResult object
+    result = DateRangeResult()
+    result.start_date = start_date
+    result.end_date = end_date
+    
+    # Format the date range string
+    if start_date.month == end_date.month and start_date.year == end_date.year:
+        # Same month format: "15-17 April 2025"
+        date_range_formatted = f"{start_date.day}-{end_date.day} {start_date.strftime('%B')} {start_date.year}"
+    else:
+        # Different month format: "15 April - 17 May 2025"
+        date_range_formatted = f"{start_date.day} {start_date.strftime('%B')} - {end_date.day} {end_date.strftime('%B')} {end_date.year}"
+    
+    result.date_range_formatted = date_range_formatted
+    result.year = str(end_date.year)
+    
+    write_log(f"Automatically determined date range: {date_range_formatted}", "GREEN")
+    return result
+
+def show_date_range_with_timeout(timeout_seconds=30):
+    """
+    Show the date range selection dialog with a timeout
+    
+    Args:
+        timeout_seconds (int): Number of seconds before timeout
+        
+    Returns:
+        DateRangeResult or None: Selected date range or None if timed out/cancelled
+    """
+    from gui.date_selector import DateRangeSelector
+    
+    # Ensure we have a QApplication instance
+    app = QApplication.instance()
+    if not app:
+        app = QApplication(sys.argv)
+    
+    # Create the dialog
+    dialog = DateRangeSelector()
+    
+    # Create a timer for the timeout
+    timer = QTimer()
+    timer.setSingleShot(True)
+    timer.setInterval(timeout_seconds * 1000)  # Convert to milliseconds
+    
+    # Connect the timer to close the dialog when it times out
+    timer.timeout.connect(dialog.reject)
+    
+    # Start the timer
+    write_log(f"Showing date range selection dialog with {timeout_seconds}-second timeout...", "YELLOW")
+    timer.start()
+    
+    # Show the dialog
+    result = None
+    if dialog.exec_() == dialog.Accepted:
+        result = dialog.result_obj
+        timer.stop()  # Stop the timer if user made a selection
+        write_log("User selected date range: " + result.date_range_formatted, "GREEN")
+    else:
+        # Dialog was closed either by timeout or user cancellation
+        if not timer.isActive():
+            write_log(f"Date range selection dialog timed out after {timeout_seconds} seconds", "YELLOW")
+        else:
+            write_log("User cancelled date range selection", "YELLOW")
+    
+    return result
 
 def check_excel_processes(terminate_all=False):
     """
@@ -224,27 +399,68 @@ def find_latest_file(root_dir, file_pattern, additional_search_dirs=None):
         import traceback
         write_log(traceback.format_exc(), "RED")
         return None
-        
+
 def main():
     """Main function to run the SharePoint automation"""
+    # Parse command line arguments
+    parser = argparse.ArgumentParser(description='SharePoint Automation Script')
+    parser.add_argument('--manual', action='store_true', help='Run in manual mode without date checks and with no timeout')
+    args = parser.parse_args()
+    
     # Record the start time
     start_time = datetime.now()
     write_log("Starting SharePoint file access script (OneDrive sync method)", "YELLOW")
-
+    
     try:
+        # Skip date checks if manual mode is enabled
+        if not args.manual:
+            current_date = datetime(2025, 7, 31).date()   
+            write_log(f"DEBUG - Date being used: {current_date}", "YELLOW")
+
+            # Check if today is a weekend
+            if is_weekend(current_date):
+                write_log("Today is a weekend. Script will not run on weekends. Exiting.", "YELLOW")
+                return
+
+            write_log(f"DEBUG - Is Friday: {is_friday(current_date)}", "YELLOW")
+            write_log(f"DEBUG - Is last day of month: {is_last_day_of_month(current_date)}", "YELLOW")
+            
+            # Check if today is a day to run (Friday or last day of month)
+            is_run_day = is_friday(current_date) or is_last_day_of_month(current_date)
+            
+            if not is_run_day:
+                write_log("Today is not a Friday or the last day of the month. Exiting.", "YELLOW")
+                return
+            
+            day_type = "Friday" if is_friday(current_date) else "Last day of month"
+            write_log(f"Today is a designated run day: {day_type}", "GREEN")
+        else:
+            write_log("Running in manual mode: skipping date checks", "YELLOW")
+        
         # Check for Excel processes
         check_excel_processes()
         
         # Warm up Excel
         warm_up_excel()
         
-        # First, get the date range from the user
-        write_log("Prompting for date range...", "YELLOW")
-        date_range = show_date_range_selection()
+        # Show the date selection dialog with or without timeout depending on mode
+        date_range = None
+        if args.manual:
+            # In manual mode, use the original show_date_range_selection without timeout
+            write_log("Showing date range selection dialog without timeout...", "YELLOW")
+            date_range = show_date_range_selection()
+        else:
+            # In automatic mode, show dialog with 30-second timeout
+            date_range = show_date_range_with_timeout(timeout_seconds=30)
         
+        # If user cancelled or dialog timed out, use automatic date range
         if not date_range:
-            write_log("Date range selection was cancelled. Exiting.", "RED")
-            return
+            write_log("No user input received. Using automatic date range.", "YELLOW")
+            date_range = get_date_range_based_on_day()
+            
+            if not date_range:
+                write_log("Could not determine appropriate date range. Exiting.", "RED")
+                return
         
         write_log(f"Selected date range: {date_range.date_range_formatted}", "GREEN")
         
