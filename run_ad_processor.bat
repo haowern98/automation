@@ -27,7 +27,7 @@ echo.
 type "%AD_PROCESSOR_TXT%"
 echo.
 echo # Process AD data and save to JSON
-echo $adComputers = Process-ADData -OutputFilePath "ad_results.json"
+echo $adComputers = Process-ADData -OutputFilePath "data\ad_results.json"
 echo Write-Log "AD processing completed with $($adComputers.Count) computers" -Color Green
 ) > "%TEMP_PS_FILE%"
 
@@ -35,9 +35,9 @@ REM Execute the temporary PS1 file
 powershell -ExecutionPolicy Bypass -File "%TEMP_PS_FILE%"
 
 REM Check if the JSON file was created
-if exist "ad_results.json" (
+if exist "data\ad_results.json" (
     echo.
-    echo AD results file created: ad_results.json
+    echo AD results file created: data\ad_results.json
 ) else (
     echo.
     echo WARNING: AD results file not created!

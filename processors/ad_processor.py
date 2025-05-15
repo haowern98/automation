@@ -7,7 +7,7 @@ import json
 import subprocess
 import time
 from utils.logger import write_log
-from config import AD_SEARCH
+from config import AD_SEARCH, AD_RESULTS_FILE, AD_COMPARISON_FILE
 
 def process_ad_data(ldap_filter=None, search_base=None):
     """
@@ -26,7 +26,7 @@ def process_ad_data(ldap_filter=None, search_base=None):
     if search_base is None:
         search_base = AD_SEARCH['search_base']
     
-    output_file = "ad_results.json"
+    output_file = AD_RESULTS_FILE
     
     write_log(f"Starting AD data processing using PowerShell with LDAP filter", "YELLOW")
     start_time = time.time()
@@ -157,7 +157,7 @@ def compare_gsn_with_ad(gsn_entries, ad_entries):
     
     # If AD entries is empty, try to load from file
     if not ad_entries:
-        ad_results_file = "ad_results.json"
+        ad_results_file = AD_RESULTS_FILE
         if os.path.exists(ad_results_file):
             write_log(f"AD entries is empty, trying to load from file: {ad_results_file}", "YELLOW")
             try:
@@ -203,10 +203,27 @@ def compare_gsn_with_ad(gsn_entries, ad_entries):
     write_log(f"- AD entries not in GSN: {len(missing_in_gsn)}", "CYAN")
     write_log("=========================================", "YELLOW")
     
-    return {
+    # Define the output file path
+    output_file_path = AD_COMPARISON_FILE
+    
+    # Save results to JSON file
+    result = {
         "MissingInAD": missing_in_ad,
         "MissingInGSN": missing_in_gsn
     }
+    
+    # Ensure the data directory exists
+    os.makedirs(os.path.dirname(output_file_path), exist_ok=True)
+    
+    # Write the comparison results to file
+    try:
+        with open(output_file_path, 'w', encoding='utf-8') as f:
+            json.dump(result, f, indent=4)
+        write_log(f"Comparison results saved to: {output_file_path}", "CYAN")
+    except Exception as e:
+        write_log(f"Error saving comparison results: {str(e)}", "RED")
+    
+    return result
 
 # Optional test function for direct testing
 def test_ad_processor():
