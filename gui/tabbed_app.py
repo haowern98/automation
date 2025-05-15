@@ -1,14 +1,13 @@
 """
-Date range selection dialog for SharePoint Automation
+SharePoint Automation - Main Application with tabbed interface
 """
 import sys
 import datetime
-from PyQt5.QtWidgets import (QApplication, QDialog, QVBoxLayout, QHBoxLayout, 
+from PyQt5.QtWidgets import (QApplication, QDialog, QVBoxLayout, QHBoxLayout,
                              QLabel, QDateEdit, QLineEdit, QPushButton,
-                             QGridLayout, QMessageBox)
+                             QGridLayout, QTabWidget, QWidget, QMessageBox)
 from PyQt5.QtCore import Qt, QDate
 from PyQt5.QtGui import QFont, QColor
-from .settings_dialog import show_settings_dialog
 
 class DateRangeResult:
     """Class to hold date range selection results"""
@@ -34,24 +33,107 @@ class DateRangeResult:
         """Check if the date range is valid"""
         return self.start_date is not None and self.end_date is not None
 
-class DateRangeSelector(QDialog):
-    """Date range selection dialog"""
+class SettingsTab(QWidget):
+    """Settings tab widget"""
+    
+    def __init__(self, parent=None):
+        """Initialize the settings tab"""
+        super(SettingsTab, self).__init__(parent)
+        
+        # Create main layout
+        main_layout = QVBoxLayout(self)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        
+        # Create internal tab widget for settings
+        self.settings_tabs = QTabWidget()
+        
+        # Create the General tab
+        general_tab = self._create_general_tab()
+        
+        # Create the File Paths tab
+        file_paths_tab = self._create_file_paths_tab()
+        
+        # Add tabs to the settings tab widget
+        self.settings_tabs.addTab(general_tab, "General")
+        self.settings_tabs.addTab(file_paths_tab, "File Paths")
+        
+        # Add the settings tabs to the main layout
+        main_layout.addWidget(self.settings_tabs)
+    
+    def _create_general_tab(self):
+        """Create the general settings tab"""
+        tab = QWidget()
+        layout = QVBoxLayout(tab)
+        layout.setContentsMargins(20, 20, 20, 20)
+        
+        # Create a heading
+        heading = QLabel("General Settings")
+        heading_font = QFont("Segoe UI", 12)
+        heading_font.setBold(True)
+        heading.setFont(heading_font)
+        
+        # Create a description
+        description = QLabel("Configure general application settings")
+        description.setWordWrap(True)
+        
+        # Placeholder for future settings
+        placeholder = QLabel("Settings will be available in future versions")
+        placeholder.setStyleSheet("color: gray; font-style: italic;")
+        placeholder.setAlignment(Qt.AlignCenter)
+        
+        # Add widgets to layout
+        layout.addWidget(heading)
+        layout.addWidget(description)
+        layout.addSpacing(20)
+        layout.addWidget(placeholder)
+        layout.addStretch(1)
+        
+        return tab
+    
+    def _create_file_paths_tab(self):
+        """Create the file paths settings tab"""
+        tab = QWidget()
+        layout = QVBoxLayout(tab)
+        layout.setContentsMargins(20, 20, 20, 20)
+        
+        # Create a heading
+        heading = QLabel("File Paths Settings")
+        heading_font = QFont("Segoe UI", 12)
+        heading_font.setBold(True)
+        heading.setFont(heading_font)
+        
+        # Create a description
+        description = QLabel("Configure file paths for GSN, ER, and SharePoint files")
+        description.setWordWrap(True)
+        
+        # Placeholder for future settings
+        placeholder = QLabel("Path configuration will be available in future versions")
+        placeholder.setStyleSheet("color: gray; font-style: italic;")
+        placeholder.setAlignment(Qt.AlignCenter)
+        
+        # Add widgets to layout
+        layout.addWidget(heading)
+        layout.addWidget(description)
+        layout.addSpacing(20)
+        layout.addWidget(placeholder)
+        layout.addStretch(1)
+        
+        return tab
+
+class DateRangeTab(QWidget):
+    """Date range selection tab"""
     
     def __init__(self, parent=None, manual_mode=False):
         """
-        Initialize the date range selector dialog
+        Initialize the date range selector tab
         
         Args:
             parent: Parent widget
             manual_mode (bool): Whether the application is running in manual mode
         """
-        super(DateRangeSelector, self).__init__(parent)
+        super(DateRangeTab, self).__init__(parent)
         
         self.manual_mode = manual_mode
-        
-        self.setWindowTitle("SharePoint Automation - Date Range Selection")
-        self.setFixedSize(460, 360)  # Increased height for settings button
-        self.setWindowFlags(self.windowFlags() & ~Qt.WindowContextHelpButtonHint)
         
         # Create the result object
         self.result_obj = DateRangeResult()
@@ -95,13 +177,6 @@ class DateRangeSelector(QDialog):
         button_layout.addWidget(self.cancel_button)
         button_layout.setAlignment(Qt.AlignCenter)
         
-        # Create settings button layout
-        settings_layout = QHBoxLayout()
-        self.settings_button = QPushButton("Settings")
-        self.settings_button.setIcon(self.style().standardIcon(self.style().SP_FileDialogInfoView))
-        settings_layout.addWidget(self.settings_button)
-        settings_layout.setAlignment(Qt.AlignRight)
-        
         # Add widgets to layout
         layout.addWidget(title_label, 0, 0, 1, 2)
         layout.addWidget(start_date_label, 1, 0)
@@ -112,7 +187,6 @@ class DateRangeSelector(QDialog):
         layout.addWidget(self.preview_textbox, 3, 1)
         layout.addWidget(self.status_label, 4, 0, 1, 2)
         layout.addLayout(button_layout, 5, 0, 1, 2)
-        layout.addLayout(settings_layout, 6, 0, 1, 2)  # Add settings button at the bottom
         
         # Set spacing
         layout.setVerticalSpacing(10)
@@ -120,9 +194,6 @@ class DateRangeSelector(QDialog):
         # Connect signals
         self.start_date_picker.dateChanged.connect(self.update_preview)
         self.end_date_picker.dateChanged.connect(self.update_preview)
-        self.ok_button.clicked.connect(self.accept)
-        self.cancel_button.clicked.connect(self.handle_cancel)
-        self.settings_button.clicked.connect(self.open_settings)
         
         # Initial preview update
         self.update_preview()
@@ -155,29 +226,85 @@ class DateRangeSelector(QDialog):
         self.result_obj.end_date = end_date
         self.result_obj.date_range_formatted = date_range_formatted
         self.result_obj.year = str(end_date.year)
+
+class SharePointAutomationApp(QDialog):
+    """Main application dialog with tabbed interface"""
+    
+    def __init__(self, parent=None, manual_mode=False):
+        """
+        Initialize the main application dialog
+        
+        Args:
+            parent: Parent widget
+            manual_mode (bool): Whether the application is running in manual mode
+        """
+        super(SharePointAutomationApp, self).__init__(parent)
+        
+        self.manual_mode = manual_mode
+        
+        self.setWindowTitle("SharePoint Automation")
+        self.setFixedSize(550, 380)  # Slightly larger for tabbed interface
+        self.setWindowFlags(self.windowFlags() & ~Qt.WindowContextHelpButtonHint)
+        
+        # Create main layout
+        layout = QVBoxLayout(self)
+        
+        # Create tab widget
+        self.tab_widget = QTabWidget()
+        
+        # Create tabs
+        self.date_range_tab = DateRangeTab(manual_mode=manual_mode)
+        self.settings_tab = SettingsTab()
+        
+        # Add tabs to tab widget
+        self.tab_widget.addTab(self.date_range_tab, "Date Range Selector")
+        self.tab_widget.addTab(self.settings_tab, "Settings")
+        
+        # Add tab widget to layout
+        layout.addWidget(self.tab_widget)
+        
+        # Add buttons at the bottom
+        button_layout = QHBoxLayout()
+        self.ok_button = QPushButton("OK")
+        
+        # Set cancel button text based on mode
+        cancel_text = "Exit" if manual_mode else "Use Auto Date"
+        self.cancel_button = QPushButton(cancel_text)
+        
+        button_layout.addWidget(self.ok_button)
+        button_layout.addWidget(self.cancel_button)
+        button_layout.setAlignment(Qt.AlignCenter)
+        
+        # Add button layout to main layout
+        layout.addLayout(button_layout)
+        
+        # Connect signals
+        self.ok_button.clicked.connect(self.accept)
+        self.cancel_button.clicked.connect(self.handle_cancel)
+        
+        # Connect the date tab buttons to the main buttons
+        self.date_range_tab.ok_button.clicked.connect(self.accept)
+        self.date_range_tab.cancel_button.clicked.connect(self.handle_cancel)
     
     def handle_cancel(self):
         """Handle the cancel button click differently based on mode"""
         if self.manual_mode:
             # In manual mode, exit the application
-            self.result_obj.cancelled = True
+            self.date_range_tab.result_obj.cancelled = True
             self.reject()
         else:
             # In auto mode, just reject the dialog
             # The main program will use automatic date calculation
-            self.result_obj.cancelled = True
+            self.date_range_tab.result_obj.cancelled = True
             self.reject()
     
-    def open_settings(self):
-        """Open the settings dialog"""
-        settings_saved = show_settings_dialog()
-        if settings_saved:
-            # In a real implementation, you would reload settings here
-            pass
+    def get_date_range_result(self):
+        """Get the date range result from the date range tab"""
+        return self.date_range_tab.result_obj
 
-def show_date_range_selection(manual_mode=False):
+def show_tabbed_date_range_selection(manual_mode=False):
     """
-    Show the date range selection dialog
+    Show the tabbed date range selection dialog
     
     Args:
         manual_mode (bool): Whether the application is running in manual mode
@@ -189,12 +316,13 @@ def show_date_range_selection(manual_mode=False):
     if not app:
         app = QApplication(sys.argv)
     
-    dialog = DateRangeSelector(manual_mode=manual_mode)
+    dialog = SharePointAutomationApp(manual_mode=manual_mode)
     result = dialog.exec_() == QDialog.Accepted
     
     # Always return the result object, even when cancelled
-    return dialog.result_obj
+    return dialog.get_date_range_result()
 
+# Just for compatibility with existing code
 def parse_date_range_string(date_range_string):
     """
     Parse a date range string into a DateRangeResult object
@@ -258,14 +386,3 @@ def parse_date_range_string(date_range_string):
     except Exception as e:
         print(f"Error parsing date range string: {str(e)}")
         return None
-
-# Test if running as standalone
-if __name__ == "__main__":
-    date_range = show_date_range_selection()
-    if date_range and not date_range.cancelled:
-        print(f"Selected date range: {date_range.date_range_formatted}")
-        print(f"Start date: {date_range.start_date}")
-        print(f"End date: {date_range.end_date}")
-        print(f"Year: {date_range.year}")
-    else:
-        print("Date selection was cancelled.")
