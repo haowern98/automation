@@ -166,17 +166,6 @@ class DateRangeTab(QWidget):
         self.status_label = QLabel("")
         self.status_label.setStyleSheet("color: red;")
         
-        button_layout = QHBoxLayout()
-        self.ok_button = QPushButton("OK")
-        
-        # Set cancel button text based on mode
-        cancel_text = "Exit" if manual_mode else "Use Auto Date"
-        self.cancel_button = QPushButton(cancel_text)
-        
-        button_layout.addWidget(self.ok_button)
-        button_layout.addWidget(self.cancel_button)
-        button_layout.setAlignment(Qt.AlignCenter)
-        
         # Add widgets to layout
         layout.addWidget(title_label, 0, 0, 1, 2)
         layout.addWidget(start_date_label, 1, 0)
@@ -186,7 +175,6 @@ class DateRangeTab(QWidget):
         layout.addWidget(preview_label, 3, 0)
         layout.addWidget(self.preview_textbox, 3, 1)
         layout.addWidget(self.status_label, 4, 0, 1, 2)
-        layout.addLayout(button_layout, 5, 0, 1, 2)
         
         # Set spacing
         layout.setVerticalSpacing(10)
@@ -206,11 +194,9 @@ class DateRangeTab(QWidget):
         # Validate dates
         if end_date < start_date:
             self.status_label.setText("End date cannot be earlier than start date.")
-            self.ok_button.setEnabled(False)
             return
         else:
             self.status_label.setText("")
-            self.ok_button.setEnabled(True)
         
         # Format the date range
         if start_date.month == end_date.month and start_date.year == end_date.year:
@@ -281,10 +267,6 @@ class SharePointAutomationApp(QDialog):
         # Connect signals
         self.ok_button.clicked.connect(self.accept)
         self.cancel_button.clicked.connect(self.handle_cancel)
-        
-        # Connect the date tab buttons to the main buttons
-        self.date_range_tab.ok_button.clicked.connect(self.accept)
-        self.date_range_tab.cancel_button.clicked.connect(self.handle_cancel)
     
     def handle_cancel(self):
         """Handle the cancel button click differently based on mode"""
