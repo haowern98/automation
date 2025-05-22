@@ -85,7 +85,7 @@ def check_run_date():
     # In production, use: current_date = datetime.now().date()
     
     # TEST DATE - replace with datetime.now().date() in production
-    current_date = datetime(2025, 6, 27).date()
+    current_date = datetime(2025, 8, 15).date()
     write_log(f"DEBUG - Test date being used: {current_date}", "YELLOW")
 
     # Check if today is a weekend
@@ -286,7 +286,7 @@ def get_automatic_date_range():
     from datetime import timedelta
     
     # TEST DATE - replace with datetime.now().date() in production
-    current_date = datetime(2025, 6, 27).date()
+    current_date = datetime(2025, 8, 15).date()
     write_log(f"Using test date for auto calculation: {current_date.strftime('%Y-%m-%d')}", "YELLOW")
     
     # If it's the last day of the month
