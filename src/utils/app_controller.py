@@ -8,15 +8,15 @@ import re
 import concurrent.futures
 from datetime import datetime
 
-from utils.logger import write_log
-from utils.excel_functions import ExcelApplication
-from utils.comparison import compare_data_sets, ExcelUpdater
-from gui.date_selector import DateRangeResult
-from gui.tabbed_app import show_tabbed_date_range_selection
-from processors.gsn_processor import process_gsn_data
-from processors.er_processor import process_er_data
-from processors.ad_processor import process_ad_data, compare_gsn_with_ad
-from config import USER_PROFILE, SYNCED_FILE_PATH, FILE_PATTERNS, AD_SEARCH, DATA_DIR
+from src.utils.logger import write_log
+from src.utils.excel_functions import ExcelApplication
+from src.utils.comparison import compare_data_sets, ExcelUpdater
+from src.gui.date_selector import DateRangeResult
+from src.gui.tabbed_app import show_tabbed_date_range_selection
+from src.processors.gsn_processor import process_gsn_data
+from src.processors.er_processor import process_er_data
+from src.processors.ad_processor import process_ad_data, compare_gsn_with_ad
+from src.config import USER_PROFILE, SYNCED_FILE_PATH, FILE_PATTERNS, AD_SEARCH, DATA_DIR
 
 def run_sharepoint_automation(manual_mode=False, debug_mode=False):
     """
@@ -85,7 +85,7 @@ def check_run_date():
     # In production, use: current_date = datetime.now().date()
     
     # TEST DATE - replace with datetime.now().date() in production
-    current_date = datetime(2025, 8, 15).date()
+    current_date = datetime(2025, 6, 30).date()
     write_log(f"DEBUG - Test date being used: {current_date}", "YELLOW")
 
     # Check if today is a weekend
@@ -286,7 +286,7 @@ def get_automatic_date_range():
     from datetime import timedelta
     
     # TEST DATE - replace with datetime.now().date() in production
-    current_date = datetime(2025, 8, 15).date()
+    current_date = datetime(2025, 6, 30).date()
     write_log(f"Using test date for auto calculation: {current_date.strftime('%Y-%m-%d')}", "YELLOW")
     
     # If it's the last day of the month

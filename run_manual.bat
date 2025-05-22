@@ -13,8 +13,8 @@ if exist venv-py312\Scripts\activate (
     echo WARNING: Virtual environment not found, using system Python.
 )
 
-rem Run the Python program in manual mode
-python main.py --manual
+rem Run the Python program in manual mode as a module
+python -m src.main --manual
 
 echo.
 echo SharePoint Automation completed.

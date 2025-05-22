@@ -3,15 +3,15 @@ Configuration settings for the SharePoint Automation
 """
 import os
 
-# Base directories
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+# Base directories - FIXED to point to project root, not src
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))  # Go up from src/ to project root
 DATA_DIR = os.path.join(BASE_DIR, "data")
 
 # File paths
 USER_PROFILE = os.environ.get('USERPROFILE', '')
 SYNCED_FILE_PATH = os.path.join(USER_PROFILE, 'DPDHL', 'SM Team - SG - AD EDS, MFA, GSN VS AD, GSN VS ER Weekly Report', 'Weekly Report 2025 - Copy.xlsx')
 
-# Data files
+# Data files - Now correctly pointing to project_root/data/
 GSN_DATA_FILE = os.path.join(DATA_DIR, "gsn_data.json")
 AD_RESULTS_FILE = os.path.join(DATA_DIR, "ad_results.json")
 AD_COMPARISON_FILE = os.path.join(DATA_DIR, "ad_comparison_results.json")

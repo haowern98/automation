@@ -2,7 +2,7 @@
 Logging utilities for the SharePoint Automation
 """
 import datetime
-from config import COLORS
+from src.config import COLORS
 
 def write_log(message, color="WHITE"):
     """

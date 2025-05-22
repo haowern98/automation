@@ -6,7 +6,7 @@ import time
 import win32com.client
 import pythoncom
 import gc
-from utils.logger import write_log
+from src.utils.logger import write_log
 
 class ExcelApplication:
     """Class to handle Excel application connections and operations"""

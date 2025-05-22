@@ -2,8 +2,8 @@
 Data comparison functionality for SharePoint Automation
 """
 import datetime
-from utils.logger import write_log
-from utils.excel_functions import ExcelApplication
+from src.utils.logger import write_log
+from src.utils.excel_functions import ExcelApplication
 
 def compare_data_sets(gsn_entries, er_entries):
     """

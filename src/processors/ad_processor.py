@@ -6,8 +6,8 @@ import os
 import json
 import subprocess
 import time
-from utils.logger import write_log
-from config import AD_SEARCH, AD_RESULTS_FILE, AD_COMPARISON_FILE
+from src.utils.logger import write_log
+from src.config import AD_SEARCH, AD_RESULTS_FILE, AD_COMPARISON_FILE
 
 def process_ad_data(ldap_filter=None, search_base=None):
     """
@@ -32,11 +32,21 @@ def process_ad_data(ldap_filter=None, search_base=None):
     start_time = time.time()
     
     try:
-        # Call the batch file to run PowerShell
-        batch_file = os.path.join(os.path.dirname(os.path.dirname(__file__)), "run_ad_processor.bat")
+        # FIXED: Calculate path to project root, then to batch file
+        # From src/processors/ad_processor.py -> project root -> run_ad_processor.bat
+        project_root = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
+        batch_file = os.path.join(project_root, "run_ad_processor.bat")
+        
+        write_log(f"Looking for batch file at: {batch_file}", "CYAN")
+        
+        # Check if batch file exists
+        if not os.path.exists(batch_file):
+            write_log(f"Batch file not found at: {batch_file}", "RED")
+            write_log("Please ensure run_ad_processor.bat is in the project root directory", "RED")
+            return []
         
         write_log(f"Executing batch file: {batch_file}", "CYAN")
-        result = subprocess.run([batch_file], capture_output=True, text=True)
+        result = subprocess.run([batch_file], capture_output=True, text=True, cwd=project_root)
         
         # Log output from batch/PowerShell
         write_log("PowerShell script output:", "CYAN")
@@ -132,6 +142,7 @@ def process_ad_data(ldap_filter=None, search_base=None):
         write_log("Please check if PowerShell and the AD module are available.", "RED")
         return []
 
+# Rest of the file remains the same...
 def compare_gsn_with_ad(gsn_entries, ad_entries):
     """
     Compare GSN and AD data sets

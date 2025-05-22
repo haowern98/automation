@@ -2,8 +2,8 @@
 ER data processing for SharePoint Automation
 """
 import time
-from utils.logger import write_log
-from utils.excel_functions import ExcelApplication
+from src.utils.logger import write_log
+from src.utils.excel_functions import ExcelApplication
 
 def process_er_data(data_file_path):
     """

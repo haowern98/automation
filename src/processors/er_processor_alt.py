@@ -4,7 +4,7 @@ Alternative ER data processing for SharePoint Automation using openpyxl
 import time
 import openpyxl
 import pandas as pd
-from utils.logger import write_log
+from src.utils.logger import write_log
 
 def process_er_data_alt(data_file_path):
     """

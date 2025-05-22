@@ -6,9 +6,9 @@ import os
 import sys
 import argparse
 from datetime import datetime
-from utils.logger import write_log
-from utils.app_controller import run_sharepoint_automation
-from config import DATA_DIR
+from src.utils.logger import write_log
+from src.utils.app_controller import run_sharepoint_automation
+from src.config import DATA_DIR
 
 def main():
     """Main function to run the SharePoint automation"""
