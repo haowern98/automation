@@ -5,7 +5,8 @@ import sys
 import datetime
 from PyQt5.QtWidgets import (QApplication, QDialog, QVBoxLayout, QHBoxLayout,
                              QLabel, QDateEdit, QLineEdit, QPushButton,
-                             QGridLayout, QTabWidget, QWidget, QMessageBox)
+                             QGridLayout, QTabWidget, QWidget, QMessageBox,
+                             QGroupBox, QFileDialog)
 from PyQt5.QtCore import Qt, QDate
 from PyQt5.QtGui import QFont, QColor
 
@@ -34,7 +35,7 @@ class DateRangeResult:
         return self.start_date is not None and self.end_date is not None
 
 class SettingsTab(QWidget):
-    """Settings tab widget"""
+    """Settings tab widget with nested tabs"""
     
     def __init__(self, parent=None):
         """Initialize the settings tab"""
@@ -96,29 +97,185 @@ class SettingsTab(QWidget):
         layout = QVBoxLayout(tab)
         layout.setContentsMargins(20, 20, 20, 20)
         
+        # Import settings manager
+        from src.gui.settings_dialog import SettingsManager
+        self.settings_manager = SettingsManager()
+        
         # Create a heading
-        heading = QLabel("File Paths Settings")
+        heading = QLabel("File Search Configuration")
         heading_font = QFont("Segoe UI", 12)
         heading_font.setBold(True)
         heading.setFont(heading_font)
         
         # Create a description
-        description = QLabel("Configure file paths for GSN, ER, and SharePoint files")
+        description = QLabel("Configure directories to search for files and file name patterns")
         description.setWordWrap(True)
-        
-        # Placeholder for future settings
-        placeholder = QLabel("Path configuration will be available in future versions")
-        placeholder.setStyleSheet("color: gray; font-style: italic;")
-        placeholder.setAlignment(Qt.AlignCenter)
         
         # Add widgets to layout
         layout.addWidget(heading)
         layout.addWidget(description)
         layout.addSpacing(20)
-        layout.addWidget(placeholder)
+        
+        # Create GSN File Settings Group
+        gsn_group = QGroupBox("GSN File Settings")
+        gsn_layout = QGridLayout(gsn_group)
+        
+        # GSN Search Directory
+        gsn_layout.addWidget(QLabel("Search Directory:"), 0, 0)
+        self.gsn_directory_edit = QLineEdit()
+        self.gsn_directory_edit.setPlaceholderText("Enter path to directory to search for GSN files")
+        gsn_layout.addWidget(self.gsn_directory_edit, 0, 1)
+        
+        gsn_browse_button = QPushButton("Browse...")
+        gsn_browse_button.clicked.connect(self.browse_gsn_directory)
+        gsn_layout.addWidget(gsn_browse_button, 0, 2)
+        
+        # GSN File Pattern
+        gsn_layout.addWidget(QLabel("File Name Pattern:"), 1, 0)
+        self.gsn_pattern_edit = QLineEdit()
+        self.gsn_pattern_edit.setPlaceholderText("Enter file name pattern (e.g., alm_hardware)")
+        gsn_layout.addWidget(self.gsn_pattern_edit, 1, 1, 1, 2)
+        
+        # Add info label
+        gsn_info = QLabel("Matches ANY file that starts with the File Name Pattern and ends with .xlsx")
+        gsn_info.setStyleSheet("color: gray; font-size: 10px;")
+        gsn_layout.addWidget(gsn_info, 2, 1, 1, 2)
+        
+        layout.addWidget(gsn_group)
+        
+        # Create ER File Settings Group
+        er_group = QGroupBox("ER File Settings")
+        er_layout = QGridLayout(er_group)
+        
+        # ER Search Directory
+        er_layout.addWidget(QLabel("Search Directory:"), 0, 0)
+        self.er_directory_edit = QLineEdit()
+        self.er_directory_edit.setPlaceholderText("Enter path to directory to search for ER files")
+        er_layout.addWidget(self.er_directory_edit, 0, 1)
+        
+        er_browse_button = QPushButton("Browse...")
+        er_browse_button.clicked.connect(self.browse_er_directory)
+        er_layout.addWidget(er_browse_button, 0, 2)
+        
+        # ER File Pattern
+        er_layout.addWidget(QLabel("File Name Pattern:"), 1, 0)
+        self.er_pattern_edit = QLineEdit()
+        self.er_pattern_edit.setPlaceholderText("Enter file name pattern (e.g., data)")
+        er_layout.addWidget(self.er_pattern_edit, 1, 1, 1, 2)
+        
+        # Add info label
+        er_info = QLabel("Matches ANY file that starts with the File Name Pattern and ends with .xlsx")
+        er_info.setStyleSheet("color: gray; font-size: 10px;")
+        er_layout.addWidget(er_info, 2, 1, 1, 2)
+        
+        layout.addWidget(er_group)
+        
+        # Add save button
+        save_button = QPushButton("Save Settings")
+        save_button.clicked.connect(self.save_settings)
+        layout.addWidget(save_button)
+        
+        # Add stretch to push everything up
         layout.addStretch(1)
         
+        # Load current settings
+        self.load_current_settings()
+        
         return tab
+    
+    def browse_gsn_directory(self):
+        """Browse for GSN search directory"""
+        import os
+        
+        current_path = self.gsn_directory_edit.text()
+        if not current_path:
+            current_path = os.environ.get('USERPROFILE', '')
+        
+        directory = QFileDialog.getExistingDirectory(
+            self, "Select GSN Search Directory", current_path)
+        
+        if directory:
+            self.gsn_directory_edit.setText(directory)
+    
+    def browse_er_directory(self):
+        """Browse for ER search directory"""
+        import os
+        
+        current_path = self.er_directory_edit.text()
+        if not current_path:
+            current_path = os.environ.get('USERPROFILE', '')
+        
+        directory = QFileDialog.getExistingDirectory(
+            self, "Select ER Search Directory", current_path)
+        
+        if directory:
+            self.er_directory_edit.setText(directory)
+    
+    def load_current_settings(self):
+        """Load current settings into the dialog"""
+        # Load GSN settings
+        gsn_dir = self.settings_manager.get('file_paths', 'gsn_search_directory', '')
+        gsn_pattern = self.settings_manager.get('file_paths', 'gsn_file_pattern', 'alm_hardware')
+        
+        self.gsn_directory_edit.setText(gsn_dir)
+        self.gsn_pattern_edit.setText(gsn_pattern)
+        
+        # Load ER settings
+        er_dir = self.settings_manager.get('file_paths', 'er_search_directory', '')
+        er_pattern = self.settings_manager.get('file_paths', 'er_file_pattern', 'data')
+        
+        self.er_directory_edit.setText(er_dir)
+        self.er_pattern_edit.setText(er_pattern)
+    
+    def save_settings(self):
+        """Save settings"""
+        import os
+        
+        try:
+            # Validate inputs
+            gsn_dir = self.gsn_directory_edit.text().strip()
+            er_dir = self.er_directory_edit.text().strip()
+            gsn_pattern = self.gsn_pattern_edit.text().strip()
+            er_pattern = self.er_pattern_edit.text().strip()
+            
+            # Check if directories exist
+            if gsn_dir and not os.path.exists(gsn_dir):
+                QMessageBox.warning(self, "Invalid Directory", 
+                                   f"GSN search directory does not exist:\n{gsn_dir}")
+                return
+            
+            if er_dir and not os.path.exists(er_dir):
+                QMessageBox.warning(self, "Invalid Directory", 
+                                   f"ER search directory does not exist:\n{er_dir}")
+                return
+            
+            # Check if patterns are not empty
+            if not gsn_pattern:
+                QMessageBox.warning(self, "Invalid Pattern", 
+                                   "GSN file pattern cannot be empty")
+                return
+            
+            if not er_pattern:
+                QMessageBox.warning(self, "Invalid Pattern", 
+                                   "ER file pattern cannot be empty")
+                return
+            
+            # Save settings
+            self.settings_manager.set('file_paths', 'gsn_search_directory', gsn_dir)
+            self.settings_manager.set('file_paths', 'er_search_directory', er_dir)
+            self.settings_manager.set('file_paths', 'gsn_file_pattern', gsn_pattern)
+            self.settings_manager.set('file_paths', 'er_file_pattern', er_pattern)
+            
+            # Save to file
+            if self.settings_manager.save_settings():
+                QMessageBox.information(self, "Settings Saved", 
+                                       "Settings have been saved successfully!")
+            else:
+                QMessageBox.critical(self, "Save Error", 
+                                    "Failed to save settings to file!")
+        
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"An error occurred while saving settings:\n{str(e)}")
 
 class DateRangeTab(QWidget):
     """Date range selection tab"""
@@ -229,7 +386,7 @@ class SharePointAutomationApp(QDialog):
         self.manual_mode = manual_mode
         
         self.setWindowTitle("SharePoint Automation")
-        self.setFixedSize(550, 380)  # Slightly larger for tabbed interface
+        self.setFixedSize(550, 500)  # Increased height for settings content
         self.setWindowFlags(self.windowFlags() & ~Qt.WindowContextHelpButtonHint)
         
         # Create main layout
