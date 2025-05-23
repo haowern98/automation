@@ -1,14 +1,14 @@
 """
-SharePoint Automation - Main Application with tabbed interface
+SharePoint Automation - Enhanced Main Application with 3-button auto mode and proper termination
 """
 import sys
 import datetime
 from PyQt5.QtWidgets import (QApplication, QDialog, QVBoxLayout, QHBoxLayout,
                              QLabel, QDateEdit, QLineEdit, QPushButton,
                              QGridLayout, QTabWidget, QWidget, QMessageBox,
-                             QGroupBox, QFileDialog)
-from PyQt5.QtCore import Qt, QDate
-from PyQt5.QtGui import QFont, QColor
+                             QGroupBox, QFileDialog, QProgressBar)
+from PyQt5.QtCore import Qt, QDate, QTimer
+from PyQt5.QtGui import QFont, QColor, QIcon
 
 class DateRangeResult:
     """Class to hold date range selection results"""
@@ -27,7 +27,9 @@ class DateRangeResult:
         self.date_range_formatted = formatted_date
         self.year = end_date.year if end_date else ""
         self.short_date_range = ""  # Kept for compatibility
-        self.cancelled = False  # New flag to indicate if the dialog was cancelled
+        self.cancelled = False  # Flag to indicate if the dialog was cancelled
+        self.user_terminated = False  # Flag to indicate if user terminated entire process
+        self.use_auto_date = False  # Flag to indicate if user chose auto date
     
     @property
     def is_valid(self):
@@ -300,7 +302,12 @@ class DateRangeTab(QWidget):
         layout.setContentsMargins(20, 20, 20, 20)
         
         # Create widgets
-        title_label = QLabel("Please select the start and end dates for your report:")
+        if manual_mode:
+            title_text = "Please select the start and end dates for your report:"
+        else:
+            title_text = "Select your date range or choose an option below:"
+        
+        title_label = QLabel(title_text)
         title_font = QFont("Segoe UI", 10)
         title_font.setBold(True)
         title_label.setFont(title_font)
@@ -370,24 +377,32 @@ class DateRangeTab(QWidget):
         self.result_obj.date_range_formatted = date_range_formatted
         self.result_obj.year = str(end_date.year)
 
-class SharePointAutomationApp(QDialog):
-    """Main application dialog with tabbed interface"""
+class EnhancedSharePointAutomationApp(QDialog):
+    """Enhanced main application dialog with 3-button auto mode and proper termination"""
     
-    def __init__(self, parent=None, manual_mode=False):
+    def __init__(self, parent=None, manual_mode=False, timeout_seconds=30):
         """
         Initialize the main application dialog
         
         Args:
             parent: Parent widget
             manual_mode (bool): Whether the application is running in manual mode
+            timeout_seconds (int): Timeout in seconds for auto mode
         """
-        super(SharePointAutomationApp, self).__init__(parent)
+        super(EnhancedSharePointAutomationApp, self).__init__(parent)
         
         self.manual_mode = manual_mode
+        self.timeout_seconds = timeout_seconds
+        self.process_terminated = False
+        self.timed_out = False
+        self.remaining_seconds = timeout_seconds
         
         self.setWindowTitle("SharePoint Automation")
-        self.setFixedSize(550, 500)  # Increased height for settings content
+        self.setFixedSize(550, 600)  # Increased height for timeout indicator
         self.setWindowFlags(self.windowFlags() & ~Qt.WindowContextHelpButtonHint)
+        
+        # Override close event to handle X button termination
+        self.closeEvent = self.handle_close_event
         
         # Create main layout
         layout = QVBoxLayout(self)
@@ -406,62 +421,175 @@ class SharePointAutomationApp(QDialog):
         # Add tab widget to layout
         layout.addWidget(self.tab_widget)
         
-        # Add buttons at the bottom
-        button_layout = QHBoxLayout()
-        self.ok_button = QPushButton("OK")
+        # Add timeout indicator for auto mode
+        if not manual_mode:
+            self.timeout_layout = QHBoxLayout()
+            
+            # Countdown label
+            self.countdown_label = QLabel(f"⏱️ Auto date will be used in {self.remaining_seconds} seconds")
+            self.countdown_label.setAlignment(Qt.AlignCenter)
+            self.countdown_label.setStyleSheet("color: #666; font-size: 11px; padding: 5px;")
+            
+            # Progress bar
+            self.progress_bar = QProgressBar()
+            self.progress_bar.setMaximum(timeout_seconds)
+            self.progress_bar.setValue(timeout_seconds)
+            self.progress_bar.setTextVisible(False)
+            self.progress_bar.setMaximumHeight(8)
+            
+            self.timeout_layout.addWidget(self.countdown_label)
+            layout.addLayout(self.timeout_layout)
+            layout.addWidget(self.progress_bar)
+            
+            # Setup timer for countdown
+            self.countdown_timer = QTimer()
+            self.countdown_timer.timeout.connect(self.update_countdown)
+            self.countdown_timer.start(1000)  # Update every second
+            
+            # Setup timeout timer
+            self.timeout_timer = QTimer()
+            self.timeout_timer.setSingleShot(True)
+            self.timeout_timer.timeout.connect(self.handle_timeout)
+            self.timeout_timer.start(timeout_seconds * 1000)
         
-        # Set cancel button text based on mode
-        cancel_text = "Exit" if manual_mode else "Use Auto Date"
-        self.cancel_button = QPushButton(cancel_text)
-        
-        button_layout.addWidget(self.ok_button)
-        button_layout.addWidget(self.cancel_button)
-        button_layout.setAlignment(Qt.AlignCenter)
+        # Add buttons based on mode
+        self.create_buttons()
         
         # Add button layout to main layout
-        layout.addLayout(button_layout)
-        
-        # Connect signals
-        self.ok_button.clicked.connect(self.accept)
-        self.cancel_button.clicked.connect(self.handle_cancel)
+        layout.addLayout(self.button_layout)
     
-    def handle_cancel(self):
-        """Handle the cancel button click differently based on mode"""
+    def create_buttons(self):
+        """Create buttons based on mode"""
+        self.button_layout = QHBoxLayout()
+        
         if self.manual_mode:
-            # In manual mode, exit the application
-            self.date_range_tab.result_obj.cancelled = True
-            self.reject()
+            # Manual mode: Just OK and Exit buttons centered
+            self.ok_button = QPushButton("OK")
+            self.exit_button = QPushButton("Exit")
+            
+            self.button_layout.addStretch()
+            self.button_layout.addWidget(self.ok_button)
+            self.button_layout.addWidget(self.exit_button)
+            self.button_layout.addStretch()
+            
+            # Connect signals
+            self.ok_button.clicked.connect(self.accept)
+            self.exit_button.clicked.connect(self.handle_terminate_process)
+            
         else:
-            # In auto mode, just reject the dialog
-            # The main program will use automatic date calculation
-            self.date_range_tab.result_obj.cancelled = True
+            # Auto mode: OK, Use Auto Date, and Exit buttons with default styling
+            self.ok_button = QPushButton("OK")
+            self.use_auto_date_button = QPushButton("Use Auto Date")
+            self.exit_button = QPushButton("Exit")
+            
+            # Layout: OK (left), center area with Use Auto Date and Exit
+            self.button_layout.addWidget(self.ok_button)
+            self.button_layout.addStretch()
+            self.button_layout.addWidget(self.use_auto_date_button)
+            self.button_layout.addWidget(self.exit_button)
+            self.button_layout.addStretch()
+            
+            # Connect signals
+            self.ok_button.clicked.connect(self.accept)
+            self.use_auto_date_button.clicked.connect(self.handle_use_auto_date)
+            self.exit_button.clicked.connect(self.handle_terminate_process)
+    
+    def update_countdown(self):
+        """Update the countdown timer display"""
+        if not self.manual_mode:
+            self.remaining_seconds -= 1
+            self.countdown_label.setText(f"⏱️ Auto date will be used in {self.remaining_seconds} seconds")
+            self.progress_bar.setValue(self.remaining_seconds)
+            
+            if self.remaining_seconds <= 0:
+                self.countdown_timer.stop()
+    
+    def handle_timeout(self):
+        """Handle timeout in auto mode"""
+        if not self.manual_mode:
+            self.timed_out = True
+            self.countdown_timer.stop()
+            self.countdown_label.setText("⏱️ Timeout - using auto date calculation")
+            self.progress_bar.setValue(0)
+            
+            # Set flags for auto date usage
+            date_range = self.date_range_tab.result_obj
+            date_range.cancelled = True
+            date_range.use_auto_date = True
+            date_range.user_terminated = False
+            
+            # Close dialog and proceed with auto date
             self.reject()
+    
+    def handle_terminate_process(self):
+        """Handle process termination"""
+        self.process_terminated = True
+        
+        # Stop timers if running
+        if hasattr(self, 'countdown_timer'):
+            self.countdown_timer.stop()
+        if hasattr(self, 'timeout_timer'):
+            self.timeout_timer.stop()
+        
+        # Set termination flags
+        date_range = self.date_range_tab.result_obj
+        date_range.cancelled = True
+        date_range.user_terminated = True
+        
+        self.reject()
+    
+    def handle_use_auto_date(self):
+        """Handle use auto date button"""
+        # Stop timers
+        if hasattr(self, 'countdown_timer'):
+            self.countdown_timer.stop()
+        if hasattr(self, 'timeout_timer'):
+            self.timeout_timer.stop()
+        
+        # Set auto date flags
+        date_range = self.date_range_tab.result_obj
+        date_range.cancelled = True
+        date_range.use_auto_date = True
+        date_range.user_terminated = False
+        
+        self.reject()
+    
+    def handle_close_event(self, event):
+        """Handle the X button close event - always terminate the process"""
+        self.handle_terminate_process()
+        event.accept()
     
     def get_date_range_result(self):
         """Get the date range result from the date range tab"""
         return self.date_range_tab.result_obj
 
-def show_tabbed_date_range_selection(manual_mode=False):
+def show_tabbed_date_range_selection(manual_mode=False, timeout_seconds=30):
     """
-    Show the tabbed date range selection dialog
+    Show the enhanced tabbed date range selection dialog
     
     Args:
         manual_mode (bool): Whether the application is running in manual mode
+        timeout_seconds (int): Timeout in seconds for auto mode
         
     Returns:
-        DateRangeResult: The selected date range or a result object with cancelled=True if cancelled
+        DateRangeResult: The selected date range or a result object with appropriate flags
     """
     app = QApplication.instance()
     if not app:
         app = QApplication(sys.argv)
     
-    dialog = SharePointAutomationApp(manual_mode=manual_mode)
+    dialog = EnhancedSharePointAutomationApp(manual_mode=manual_mode, timeout_seconds=timeout_seconds)
     result = dialog.exec_() == QDialog.Accepted
     
-    # Always return the result object, even when cancelled
+    # Always return the result object with appropriate flags set
     return dialog.get_date_range_result()
 
-# Just for compatibility with existing code
+# Keep the old function name for compatibility
+def show_enhanced_date_range_selection(manual_mode=False, timeout_seconds=30):
+    """Alias for show_tabbed_date_range_selection"""
+    return show_tabbed_date_range_selection(manual_mode, timeout_seconds)
+
+# Compatibility function - just delegates to the enhanced version
 def parse_date_range_string(date_range_string):
     """
     Parse a date range string into a DateRangeResult object

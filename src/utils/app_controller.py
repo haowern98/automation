@@ -1,5 +1,5 @@
 """
-Main application controller for SharePoint Automation
+Enhanced Main application controller for SharePoint Automation with proper flow termination
 """
 import os
 import sys
@@ -12,12 +12,14 @@ from src.utils.logger import write_log
 from src.utils.excel_functions import ExcelApplication
 from src.utils.comparison import compare_data_sets, ExcelUpdater
 from src.gui.date_selector import DateRangeResult
-from src.gui.tabbed_app import show_tabbed_date_range_selection
 from src.gui.settings_dialog import get_settings
 from src.processors.gsn_processor import process_gsn_data
 from src.processors.er_processor import process_er_data
 from src.processors.ad_processor import process_ad_data, compare_gsn_with_ad
 from src.config import USER_PROFILE, SYNCED_FILE_PATH, FILE_PATTERNS, AD_SEARCH, DATA_DIR
+
+# Global flag to track if user wants to terminate the entire process
+_USER_TERMINATED = False
 
 def run_sharepoint_automation(manual_mode=False, debug_mode=False):
     """
@@ -30,6 +32,9 @@ def run_sharepoint_automation(manual_mode=False, debug_mode=False):
     Returns:
         bool: Success status
     """
+    global _USER_TERMINATED
+    _USER_TERMINATED = False  # Reset termination flag
+    
     try:
         # Skip date checks if manual mode is enabled
         if not manual_mode:
@@ -41,24 +46,47 @@ def run_sharepoint_automation(manual_mode=False, debug_mode=False):
         # Check for Excel processes and warm up Excel
         manage_excel()
         
+        # Check if user terminated during Excel management
+        if _USER_TERMINATED:
+            write_log("Process terminated by user during Excel management", "YELLOW")
+            return False
+        
         # Get date range (through GUI or automatic calculation)
         date_range = get_date_range(manual_mode)
         if not date_range or not date_range.is_valid:
+            if _USER_TERMINATED:
+                write_log("Process terminated by user", "YELLOW")
+                return False
             write_log("No valid date range provided. Exiting.", "RED")
             return False
             
         write_log(f"Using date range: {date_range.date_range_formatted}", "GREEN")
+        
+        # Check if user terminated after date selection
+        if _USER_TERMINATED:
+            write_log("Process terminated by user after date selection", "YELLOW")
+            return False
         
         # Find required files
         file_paths = find_required_files()
         if not file_paths:
             return False
             
+        # Check if user terminated during file search
+        if _USER_TERMINATED:
+            write_log("Process terminated by user during file search", "YELLOW")
+            return False
+        
         # Process data
         data_results = process_data(file_paths)
         if not data_results:
             return False
             
+        # Check if user terminated during data processing
+        if _USER_TERMINATED:
+            write_log("Process terminated by user during data processing", "YELLOW")
+            return False
+        
         # Update Excel file with results
         success = update_excel_file(date_range, data_results)
         
@@ -71,10 +99,19 @@ def run_sharepoint_automation(manual_mode=False, debug_mode=False):
         return success
         
     except Exception as e:
+        if _USER_TERMINATED:
+            write_log("Process terminated by user", "YELLOW")
+            return False
         write_log(f"Error in SharePoint automation: {str(e)}", "RED")
         import traceback
         write_log(traceback.format_exc(), "RED")
         return False
+
+def terminate_process():
+    """Set the global termination flag"""
+    global _USER_TERMINATED
+    _USER_TERMINATED = True
+    write_log("User requested process termination", "YELLOW")
 
 def check_run_date():
     """
@@ -193,87 +230,54 @@ def get_date_range(manual_mode):
     Returns:
         DateRangeResult: Selected date range
     """
-    # Show the date selection dialog with or without timeout depending on mode
+    global _USER_TERMINATED
+    
+    # Import the enhanced UI
+    from src.gui.tabbed_app import show_tabbed_date_range_selection
+    
+    # Show the date selection dialog
     date_range = None
     if manual_mode:
-        # In manual mode, use the updated tabbed interface with manual_mode=True
+        # In manual mode, no timeout
         write_log("Showing date range selection dialog in manual mode...", "YELLOW")
         date_range = show_tabbed_date_range_selection(manual_mode=True)
         
-        # If cancelled in manual mode, exit the program
-        if date_range and date_range.cancelled:
+        # If user terminated in manual mode, exit the program
+        if date_range and date_range.user_terminated:
             write_log("User chose to exit in manual mode", "YELLOW")
+            _USER_TERMINATED = True
             return None
     else:
         # In automatic mode, show dialog with 30-second timeout
-        date_range = show_date_range_with_timeout(timeout_seconds=30, manual_mode=False)
-    
-    # If cancelled or dialog timed out, use automatic date range in auto mode
-    if date_range and date_range.cancelled and not manual_mode:
-        write_log("User cancelled selection or timed out. Using automatic date range based on test date.", "YELLOW")
-        # Use our test date-based calculation
-        date_range = get_automatic_date_range()
+        write_log("Showing date range selection dialog with 30-second timeout...", "YELLOW")
+        write_log("Options: OK (use selected dates), Use Auto Date (skip to calculated dates), Cancel Process (terminate)", "CYAN")
         
-    return date_range
-
-def show_date_range_with_timeout(timeout_seconds=30, manual_mode=False):
-    """
-    Show the date range selection dialog with a timeout
+        date_range = show_tabbed_date_range_selection(manual_mode=False, timeout_seconds=30)
     
-    Args:
-        timeout_seconds (int): Number of seconds before timeout
-        manual_mode (bool): Whether running in manual mode
-        
-    Returns:
-        DateRangeResult: Selected date range or None if cancelled
-    """
-    from PyQt5.QtCore import QTimer, Qt
-    from PyQt5.QtWidgets import QApplication, QDialog
-    from src.gui.tabbed_app import SharePointAutomationApp
-    
-    # Ensure we have a QApplication instance
-    app = QApplication.instance()
-    if not app:
-        app = QApplication(sys.argv)
-    
-    # Create the dialog
-    dialog = SharePointAutomationApp(manual_mode=manual_mode)
-    
-    # Create a timer for the timeout
-    timer = QTimer()
-    timer.setSingleShot(True)
-    timer.setInterval(timeout_seconds * 1000)  # Convert to milliseconds
-    
-    # Connect the timer to close the dialog when it times out
-    timer.timeout.connect(dialog.reject)
-    
-    # Start the timer
-    write_log(f"Showing date range selection dialog with {timeout_seconds}-second timeout...", "YELLOW")
-    timer.start()
-    
-    # Show the dialog
-    result = dialog.exec_() == QDialog.Accepted
-    timer.stop()  # Stop the timer
-    
-    # Get the result object from the dialog
-    date_range = dialog.get_date_range_result()
-    
-    # Check if user cancelled or accepted
-    if not result:
-        if not timer.isActive():
-            write_log(f"Date range selection dialog timed out after {timeout_seconds} seconds", "YELLOW")
-        else:
-            write_log("User cancelled date range selection", "YELLOW")
-        
-        # If in manual mode and cancelled, user wants to exit
-        if manual_mode and date_range.cancelled:
-            write_log("Manual mode: Exiting application as requested by user", "YELLOW")
+    # Handle the different outcomes
+    if date_range:
+        # Check if user explicitly terminated the entire process
+        if date_range.user_terminated:
+            write_log("User explicitly terminated the process", "YELLOW")
+            _USER_TERMINATED = True
             return None
         
-        # In auto mode, mark as cancelled so we use auto date calculation
-        date_range.cancelled = True
-    else:
-        write_log("User selected date range: " + date_range.date_range_formatted, "GREEN")
+        # Check if user chose to use auto date (either button or timeout)
+        if date_range.use_auto_date or (date_range.cancelled and not date_range.user_terminated):
+            if date_range.use_auto_date:
+                write_log("User chose to use auto date calculation", "YELLOW")
+            else:
+                write_log("Dialog timed out. Using automatic date range calculation", "YELLOW")
+            
+            # Use automatic date calculation
+            date_range = get_automatic_date_range()
+            if not date_range:
+                write_log("Failed to calculate automatic date range", "RED")
+                return None
+        
+        # If we reach here with a valid date range, user chose OK with their selected dates
+        elif not date_range.cancelled:
+            write_log(f"User selected custom date range: {date_range.date_range_formatted}", "GREEN")
     
     return date_range
 
