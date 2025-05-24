@@ -234,6 +234,12 @@ def get_date_range(manual_mode):
     
     # Import the enhanced UI
     from src.gui.tabbed_app import show_tabbed_date_range_selection
+    from src.gui.settings_dialog import get_settings
+    
+    # Get the configured timeout from settings
+    settings = get_settings()
+    timeout_seconds = int(settings.get('general', 'auto_mode_timeout', '30'))
+    write_log(f"Using configured timeout of {timeout_seconds} seconds", "CYAN")
     
     # Show the date selection dialog
     date_range = None
@@ -248,11 +254,11 @@ def get_date_range(manual_mode):
             _USER_TERMINATED = True
             return None
     else:
-        # In automatic mode, show dialog with 30-second timeout
-        write_log("Showing date range selection dialog with 30-second timeout...", "YELLOW")
+        # In automatic mode, show dialog with configured timeout
+        write_log(f"Showing date range selection dialog with {timeout_seconds}-second timeout...", "YELLOW")
         write_log("Options: OK (use selected dates), Use Auto Date (skip to calculated dates), Cancel Process (terminate)", "CYAN")
         
-        date_range = show_tabbed_date_range_selection(manual_mode=False, timeout_seconds=30)
+        date_range = show_tabbed_date_range_selection(manual_mode=False, timeout_seconds=timeout_seconds)
     
     # Handle the different outcomes
     if date_range:

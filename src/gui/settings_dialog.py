@@ -6,7 +6,7 @@ import json
 from PyQt5.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, 
                              QLabel, QPushButton, QGridLayout, 
                              QTabWidget, QWidget, QGroupBox, QLineEdit,
-                             QCheckBox, QFileDialog, QMessageBox)
+                             QCheckBox, QFileDialog, QMessageBox, QComboBox)
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QFont
 
@@ -22,6 +22,10 @@ class SettingsManager:
                 "er_search_directory": os.path.join(os.environ.get('USERPROFILE', ''), 'Downloads'),
                 "gsn_file_pattern": "alm_hardware",
                 "er_file_pattern": "data"
+            },
+            "general": {
+                "auto_mode_timeout": "30",
+                "show_terminal": False 
             }
         }
         self.settings = self.load_settings()
@@ -34,13 +38,22 @@ class SettingsManager:
                     loaded_settings = json.load(f)
                     # Merge with defaults to ensure all keys exist
                     settings = self.default_settings.copy()
-                    settings.update(loaded_settings)
+                    self._update_dict_recursive(settings, loaded_settings)
                     return settings
             else:
                 return self.default_settings.copy()
         except Exception as e:
             print(f"Error loading settings: {e}")
             return self.default_settings.copy()
+    
+    def _update_dict_recursive(self, d, u):
+        """Recursively update a dictionary with another dictionary"""
+        for k, v in u.items():
+            if isinstance(v, dict):
+                d[k] = self._update_dict_recursive(d.get(k, {}), v)
+            else:
+                d[k] = v
+        return d
     
     def save_settings(self):
         """Save settings to file"""
@@ -54,7 +67,11 @@ class SettingsManager:
     
     def get(self, category, key, default=None):
         """Get a setting value"""
-        return self.settings.get(category, {}).get(key, default)
+        try:
+            return self.settings.get(category, {}).get(key, default)
+        except Exception as e:
+            print(f"Error getting setting {category}.{key}: {e}")
+            return default
     
     def set(self, category, key, value):
         """Set a setting value"""
@@ -83,9 +100,11 @@ class SettingsDialog(QDialog):
         tab_widget = QTabWidget()
         
         # Create tabs
+        general_tab = self._create_general_tab()
         file_paths_tab = self._create_file_paths_tab()
         
         # Add tabs to the tab widget
+        tab_widget.addTab(general_tab, "General")
         tab_widget.addTab(file_paths_tab, "File Paths")
         
         # Add the tab widget to the main layout
@@ -112,6 +131,53 @@ class SettingsDialog(QDialog):
         
         # Load current settings into the dialog
         self.load_current_settings()
+    
+    def _create_general_tab(self):
+        """Create the general settings tab"""
+        tab = QWidget()
+        layout = QVBoxLayout(tab)
+        layout.setContentsMargins(20, 20, 20, 20)
+        
+        # Create a heading
+        heading = QLabel("General Settings")
+        heading_font = QFont("Segoe UI", 12)
+        heading_font.setBold(True)
+        heading.setFont(heading_font)
+        
+        # Create a description
+        description = QLabel("Configure general application settings")
+        description.setWordWrap(True)
+        
+        # Create timeout settings group
+        timeout_group = QGroupBox("Auto Mode Timeout")
+        timeout_layout = QGridLayout(timeout_group)
+        
+        # Add timeout dropdown
+        timeout_layout.addWidget(QLabel("Auto mode timeout:"), 0, 0)
+        self.timeout_dropdown = QComboBox()
+        self.timeout_dropdown.addItems(["10 seconds", "20 seconds", "30 seconds", "45 seconds", "60 seconds", "90 seconds", "120 seconds"])
+        
+        # Set default selection to 30 seconds (index 2)
+        self.timeout_dropdown.setCurrentIndex(2)
+        
+        timeout_layout.addWidget(self.timeout_dropdown, 0, 1)
+        
+        # Add help text
+        timeout_help = QLabel("Time before the date selection dialog automatically uses auto date in auto mode")
+        timeout_help.setStyleSheet("color: gray; font-size: 10px;")
+        timeout_layout.addWidget(timeout_help, 1, 0, 1, 2)
+        
+        # Add widgets to layout
+        layout.addWidget(heading)
+        layout.addWidget(description)
+        layout.addSpacing(20)
+        layout.addWidget(timeout_group)
+        layout.addStretch(1)
+        
+        # Load timeout setting
+        self.load_timeout_setting()
+        
+        return tab
     
     def _create_file_paths_tab(self):
         """Create the file paths settings tab"""
@@ -233,6 +299,17 @@ class SettingsDialog(QDialog):
         self.er_directory_edit.setText(er_dir)
         self.er_pattern_edit.setText(er_pattern)
     
+    def load_timeout_setting(self):
+        """Load timeout setting from settings"""
+        # Default to 30 seconds if not set
+        timeout_value = self.settings_manager.get('general', 'auto_mode_timeout', '30')
+        
+        # Find the matching index in the dropdown
+        for i in range(self.timeout_dropdown.count()):
+            if timeout_value in self.timeout_dropdown.itemText(i):
+                self.timeout_dropdown.setCurrentIndex(i)
+                break
+    
     def save_settings(self):
         """Save settings and close dialog"""
         try:
@@ -264,11 +341,16 @@ class SettingsDialog(QDialog):
                                    "ER file pattern cannot be empty")
                 return
             
-            # Save settings
+            # Save file path settings
             self.settings_manager.set('file_paths', 'gsn_search_directory', gsn_dir)
             self.settings_manager.set('file_paths', 'er_search_directory', er_dir)
             self.settings_manager.set('file_paths', 'gsn_file_pattern', gsn_pattern)
             self.settings_manager.set('file_paths', 'er_file_pattern', er_pattern)
+            
+            # Save timeout setting
+            timeout_text = self.timeout_dropdown.currentText()
+            timeout_value = timeout_text.split()[0]  # Extract just the number
+            self.settings_manager.set('general', 'auto_mode_timeout', timeout_value)
             
             # Save to file
             if self.settings_manager.save_settings():
@@ -297,6 +379,9 @@ class SettingsDialog(QDialog):
             self.er_directory_edit.setText(downloads_path)
             self.gsn_pattern_edit.setText("alm_hardware")
             self.er_pattern_edit.setText("data")
+            
+            # Reset timeout to default (30 seconds)
+            self.timeout_dropdown.setCurrentIndex(2)  # "30 seconds" is at index 2
 
 def show_settings_dialog():
     """
