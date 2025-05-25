@@ -5,7 +5,7 @@ This package provides automation tools for SharePoint data processing,
 including GSN vs ER comparison, AD data processing, and Excel report generation.
 
 Main Components:
-- processors: Data processing modules for GSN, ER, and AD data
+- processors: Data processing modules for GSN, ER, AD data, and weekly reports
 - utils: Utility functions for logging, Excel operations, and data comparison
 - gui: Graphical user interface components for date selection and settings
 
@@ -27,6 +27,7 @@ from .utils.app_controller import run_sharepoint_automation
 from .processors.gsn_processor import process_gsn_data
 from .processors.er_processor import process_er_data
 from .processors.ad_processor import process_ad_data, compare_gsn_with_ad
+from .processors.weekly_report_extractor import WeeklyReportExtractor
 from .utils.comparison import compare_data_sets
 from .gui.date_selector import show_date_range_selection, DateRangeResult
 from .gui.tabbed_app import show_tabbed_date_range_selection
@@ -41,6 +42,7 @@ __all__ = [
     'process_er_data', 
     'process_ad_data',
     'compare_gsn_with_ad',
+    'WeeklyReportExtractor',
     
     # Utilities
     'compare_data_sets',
