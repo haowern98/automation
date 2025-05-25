@@ -431,59 +431,72 @@ class WeeklyReportExtractor:
         
         # First, generate CSS with explicit column selectors
         html = '''
-<style>
-/* Base table styling */
-table.weekly-report {
-    border-collapse: collapse;
-    width: 100%;
-    margin-bottom: 20px;
-    font-family: Arial, sans-serif;
-}
+    <style>
+    /* Base table styling */
+    table.weekly-report {
+        border-collapse: collapse;
+        width: 100%;
+        margin-bottom: 20px;
+        font-family: Arial, sans-serif;
+        table-layout: fixed;
+    }
 
-/* Cell borders and padding */
-table.weekly-report td {
-    border: 1px solid #dddddd;
-    padding: 8px;
-    vertical-align: top;
-}
+    /* Cell borders and padding */
+    table.weekly-report td {
+        border: 1px solid #dddddd;
+        padding: 8px;
+        vertical-align: top;
+        width: 25%; /* Ensure equal column widths */
+    }
 
-/* First row (date range) - gray background */
-table.weekly-report tr:first-child td {
-    background-color: #f0f0f5;
-}
+    /* First row (date range) - gray background */
+    table.weekly-report tr:first-child td {
+        background-color: #f0f0f5 !important;
+    }
 
-/* Second row (column headers) - red text */
-table.weekly-report tr:nth-child(2) td {
-    color: #ff0000;
-    font-weight: bold;
-}
+    /* Second row (column headers) - red text */
+    table.weekly-report tr:nth-child(2) td {
+        color: #ff0000;
+        font-weight: bold;
+    }
 
-/* Section headers - light blue background */
-tr.section-header td {
-    background-color: #ddebf7 !important;
-    font-weight: bold;
-}
+    /* Section headers - light blue background spans full row */
+    tr.section-header td {
+        background-color: #ddebf7 !important;
+        font-weight: bold;
+    }
 
-/* Status column - force all cells to have white background by default */
-table.weekly-report td:last-child {
-    background-color: white !important;
-}
+    /* Status column - force all cells to have white background by default */
+    table.weekly-report td:last-child {
+        background-color: white !important;
+    }
 
-/* Override for "Pending" in status column only */
-table.weekly-report td:last-child.pending {
-    background-color: #ffeb9c !important;
-    color: #9c5700;
-}
+    /* Override for "Pending" in status column only */
+    table.weekly-report td:last-child.pending {
+        background-color: #ffeb9c !important;
+        color: #9c5700;
+    }
 
-/* Override for "Completed" in status column only */
-table.weekly-report td:last-child.completed {
-    background-color: #c6efce !important;
-    color: #006100;
-}
-</style>
+    /* Override for "Completed" in status column only */
+    table.weekly-report td:last-child.completed {
+        background-color: #c6efce !important;
+        color: #006100;
+    }
 
-<table class="weekly-report">
-'''
+    /* Ensure section header backgrounds override status column defaults */
+    tr.section-header td:last-child {
+        background-color: #ddebf7 !important;
+        color: inherit !important;
+    }
+
+    /* Force background inheritance for empty cells */
+    td:empty {
+        background-color: inherit !important;
+    }
+    </style>
+
+    <table class="weekly-report">
+    '''
         
         # Process each row of data
         for row_idx, row in enumerate(data):
@@ -491,7 +504,7 @@ table.weekly-report td:last-child.completed {
             is_section_header = False
             if row_idx > 1 and row[0]['value']:
                 first_cell = row[0]['value']
-                if any(header in first_cell for header in ["Applied MFA Method", "ARP Invalid", "Accounts with Manager", "No AD"]):
+                if any(header in first_cell for header in ["Applied MFA Method", "ARP Invalid", "Accounts with Manager", "No AD", "GID assigned"]):
                     is_section_header = True
             
             # Start row
@@ -500,13 +513,26 @@ table.weekly-report td:last-child.completed {
             else:
                 html += '<tr>\n'
             
-            # Process each cell in the row
-            for col_idx, cell in enumerate(row):
-                cell_value = cell.get('value', '')
-                is_last_column = (col_idx == len(row) - 1)
+            # Ensure we have enough cells to fill the table width
+            # Get the maximum number of columns from all rows
+            max_cols = max(len(r) for r in data) if data else 4
+            
+            # Process each cell in the row, padding with empty cells if needed
+            for col_idx in range(max_cols):
+                # Get cell value if it exists, otherwise empty
+                if col_idx < len(row):
+                    cell_value = row[col_idx].get('value', '')
+                else:
+                    cell_value = ''
                 
-                # Special styling for status column
-                if is_last_column:
+                is_last_column = (col_idx == max_cols - 1)
+                
+                # Special styling for different cell types
+                if is_section_header:
+                    # Section header - all cells get blue background
+                    html += f'  <td style="background-color: #ddebf7 !important; font-weight: bold;">{cell_value}</td>\n'
+                elif is_last_column:
+                    # Status column - special colors for Pending/Completed
                     if cell_value == "Pending":
                         html += f'  <td class="pending">{cell_value}</td>\n'
                     elif cell_value == "Completed":

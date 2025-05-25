@@ -36,8 +36,9 @@ class EnhancedSharePointAutomationApp(QDialog):
         self.remaining_seconds = timeout_seconds
         
         self.setWindowTitle("SharePoint Automation")
-        self.setFixedSize(700, 650)  # Increased width and height for weekly report tab
-        self.setWindowFlags(self.windowFlags() & ~Qt.WindowContextHelpButtonHint)
+        self.setMinimumSize(700, 650)  # Minimum size for weekly report tab
+        self.resize(700, 650)          # Default starting size
+        self.setWindowFlags(Qt.Window | Qt.WindowMinimizeButtonHint | Qt.WindowMaximizeButtonHint | Qt.WindowCloseButtonHint)
         
         # Override close event to handle X button termination
         self.closeEvent = self.handle_close_event
