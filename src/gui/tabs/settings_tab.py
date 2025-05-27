@@ -1,7 +1,7 @@
 """
 Settings Tab
 
-Tab for configuring application settings including file paths and general preferences.
+Updated tab for configuring application settings with "Off" option for timeout.
 """
 from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QTabWidget, QLabel, QGroupBox,
                              QGridLayout, QComboBox, QCheckBox, QPushButton, QLineEdit,
@@ -61,18 +61,18 @@ class SettingsTab(QWidget):
         timeout_group = QGroupBox("Auto Mode Timeout")
         timeout_layout = QGridLayout(timeout_group)
         
-        # Add timeout dropdown
+        # Add timeout dropdown with "Off" option
         timeout_layout.addWidget(QLabel("Auto mode timeout:"), 0, 0)
         self.timeout_dropdown = QComboBox()
-        self.timeout_dropdown.addItems(["10 seconds", "20 seconds", "30 seconds", "45 seconds", "60 seconds", "90 seconds", "120 seconds"])
+        self.timeout_dropdown.addItems(["Off", "10 seconds", "20 seconds", "30 seconds", "45 seconds", "60 seconds", "90 seconds", "120 seconds"])
         
-        # Set default selection to 30 seconds (index 2)
-        self.timeout_dropdown.setCurrentIndex(2)
+        # Set default selection to 30 seconds (index 3, since "Off" is now index 0)
+        self.timeout_dropdown.setCurrentIndex(3)
         
         timeout_layout.addWidget(self.timeout_dropdown, 0, 1)
         
         # Add help text
-        timeout_help = QLabel("Time before the date selection dialog automatically uses auto date in auto mode")
+        timeout_help = QLabel("Time before the date selection dialog automatically uses auto date in auto mode. Select 'Off' to disable timeout.")
         timeout_help.setStyleSheet("color: gray; font-size: 10px;")
         timeout_layout.addWidget(timeout_help, 1, 0, 1, 2)
         
@@ -249,8 +249,13 @@ class SettingsTab(QWidget):
         # Default to 30 seconds if not set
         timeout_value = self.settings_manager.get('general', 'auto_mode_timeout', '30')
         
+        # Handle "Off" setting
+        if timeout_value.lower() == 'off' or timeout_value == '0':
+            self.timeout_dropdown.setCurrentIndex(0)  # "Off" is at index 0
+            return
+        
         # Find the matching index in the dropdown
-        for i in range(self.timeout_dropdown.count()):
+        for i in range(1, self.timeout_dropdown.count()):  # Start from 1 to skip "Off"
             if timeout_value in self.timeout_dropdown.itemText(i):
                 self.timeout_dropdown.setCurrentIndex(i)
                 break
@@ -268,7 +273,10 @@ class SettingsTab(QWidget):
             
             # Save timeout setting
             timeout_text = self.timeout_dropdown.currentText()
-            timeout_value = timeout_text.split()[0]  # Extract just the number
+            if timeout_text == "Off":
+                timeout_value = "off"
+            else:
+                timeout_value = timeout_text.split()[0]  # Extract just the number
             self.settings_manager.set('general', 'auto_mode_timeout', timeout_value)
             
             # Save terminal visibility setting if the checkbox exists

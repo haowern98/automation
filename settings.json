@@ -6,7 +6,7 @@
         "er_file_pattern": "data"
     },
     "general": {
-        "auto_mode_timeout": "120",
+        "auto_mode_timeout": "off",
         "show_terminal": false
     }
 }

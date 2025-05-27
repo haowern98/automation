@@ -1,22 +1,23 @@
 """
-SharePoint Automation - Main Application with Organized Tab Structure
+SharePoint Automation - Main Application with Buttons in Date Range Tab
 
-This is the main application dialog that coordinates the different tabs.
-Individual tab implementations are in the src/gui/tabs/ folder.
+This is the main application dialog with buttons moved to the date range tab.
+The progress bar remains in the main dialog.
 """
 import sys
 import datetime
 from PyQt5.QtWidgets import (QApplication, QDialog, QVBoxLayout, QHBoxLayout,
-                             QPushButton, QTabWidget, QProgressBar, QLabel)
+                             QTabWidget, QProgressBar, QLabel)
 from PyQt5.QtCore import Qt, QTimer
 from PyQt5.QtGui import QFont
 
-# Import individual tabs
-from src.gui.tabs import DateRangeTab, DateRangeResult, SettingsTab, WeeklyReportTab
+# Import individual tabs - using the updated DateRangeTab
+from src.gui.tabs.date_range_tab import DateRangeTab, DateRangeResult
+from src.gui.tabs import SettingsTab, WeeklyReportTab
 
 
 class EnhancedSharePointAutomationApp(QDialog):
-    """Enhanced main application dialog with organized tab structure"""
+    """Enhanced main application dialog with buttons in date range tab"""
     
     def __init__(self, parent=None, manual_mode=False, timeout_seconds=30):
         """
@@ -34,11 +35,15 @@ class EnhancedSharePointAutomationApp(QDialog):
         self.process_terminated = False
         self.timed_out = False
         self.remaining_seconds = timeout_seconds
+        self.timeout_disabled = False  # Initialize this flag
         
         self.setWindowTitle("SharePoint Automation")
-        self.setMinimumSize(700, 650)  # Minimum size for weekly report tab
-        self.resize(700, 650)          # Default starting size
-        self.setWindowFlags(Qt.Window | Qt.WindowMinimizeButtonHint | Qt.WindowMaximizeButtonHint | Qt.WindowCloseButtonHint)
+        self.resize(700, 650)  # Set initial size but allow resizing
+        self.setMinimumSize(600, 500)  # Set minimum size to prevent it from being too small
+        # Only remove the help button, keep minimize, maximize, close buttons
+        self.setWindowFlags(Qt.Window | Qt.WindowTitleHint | Qt.WindowSystemMenuHint | 
+                           Qt.WindowMinimizeButtonHint | Qt.WindowMaximizeButtonHint | 
+                           Qt.WindowCloseButtonHint)
         
         # Override close event to handle X button termination
         self.closeEvent = self.handle_close_event
@@ -54,90 +59,91 @@ class EnhancedSharePointAutomationApp(QDialog):
         self.weekly_report_tab = WeeklyReportTab()
         self.settings_tab = SettingsTab()
         
+        # Connect signals from the date range tab
+        self.date_range_tab.ok_clicked.connect(self.handle_ok)
+        self.date_range_tab.exit_clicked.connect(self.handle_exit)
+        if not manual_mode:
+            self.date_range_tab.use_auto_date_clicked.connect(self.handle_use_auto_date)
+        
         # Add tabs to tab widget in desired order
-        self.tab_widget.addTab(self.date_range_tab, "Date Range Selector")
-        self.tab_widget.addTab(self.weekly_report_tab, "Weekly Report Viewer")
+        self.tab_widget.addTab(self.date_range_tab, "Extract and Process Data to Excel")
+        self.tab_widget.addTab(self.weekly_report_tab, "Generate Report from Excel")
         self.tab_widget.addTab(self.settings_tab, "Settings")
         
         # Add tab widget to layout
         layout.addWidget(self.tab_widget)
         
-        # Add timeout indicator for auto mode
+        # Add timeout indicator for auto mode (progress bar remains here)
         if not manual_mode:
-            self.timeout_layout = QHBoxLayout()
+            # Check if timeout is disabled (very large number)
+            self.timeout_disabled = timeout_seconds >= 999999
             
-            # Countdown label
-            self.countdown_label = QLabel(f"⏱️ Auto date will be used in {self.remaining_seconds} seconds")
-            self.countdown_label.setAlignment(Qt.AlignCenter)
-            self.countdown_label.setStyleSheet("color: #666; font-size: 11px; padding: 5px;")
-            
-            # Progress bar
-            self.progress_bar = QProgressBar()
-            self.progress_bar.setMaximum(timeout_seconds)
-            self.progress_bar.setValue(timeout_seconds)
-            self.progress_bar.setTextVisible(False)
-            self.progress_bar.setMaximumHeight(8)
-            
-            self.timeout_layout.addWidget(self.countdown_label)
-            layout.addLayout(self.timeout_layout)
-            layout.addWidget(self.progress_bar)
-            
-            # Setup timer for countdown
-            self.countdown_timer = QTimer()
-            self.countdown_timer.timeout.connect(self.update_countdown)
-            self.countdown_timer.start(1000)  # Update every second
-            
-            # Setup timeout timer
-            self.timeout_timer = QTimer()
-            self.timeout_timer.setSingleShot(True)
-            self.timeout_timer.timeout.connect(self.handle_timeout)
-            self.timeout_timer.start(timeout_seconds * 1000)
-        
-        # Add buttons based on mode
-        self.create_buttons()
-        
-        # Add button layout to main layout
-        layout.addLayout(self.button_layout)
+            if not self.timeout_disabled:
+                self.timeout_layout = QHBoxLayout()
+                
+                # Countdown label
+                self.countdown_label = QLabel(f"⏱️ Auto date will be used in {self.remaining_seconds} seconds")
+                self.countdown_label.setAlignment(Qt.AlignCenter)
+                self.countdown_label.setStyleSheet("color: #666; font-size: 11px; padding: 5px;")
+                
+                # Progress bar
+                self.progress_bar = QProgressBar()
+                self.progress_bar.setMaximum(timeout_seconds)
+                self.progress_bar.setValue(timeout_seconds)
+                self.progress_bar.setTextVisible(False)
+                self.progress_bar.setMaximumHeight(8)
+                
+                self.timeout_layout.addWidget(self.countdown_label)
+                layout.addLayout(self.timeout_layout)
+                layout.addWidget(self.progress_bar)
+                
+                # Setup timer for countdown
+                self.countdown_timer = QTimer()
+                self.countdown_timer.timeout.connect(self.update_countdown)
+                self.countdown_timer.start(1000)  # Update every second
+                
+                # Setup timeout timer
+                self.timeout_timer = QTimer()
+                self.timeout_timer.setSingleShot(True)
+                self.timeout_timer.timeout.connect(self.handle_timeout)
+                self.timeout_timer.start(timeout_seconds * 1000)
+            else:
+                # Timeout is disabled, show a message instead
+                disabled_label = QLabel("⏱️ Auto timeout is disabled")
+                disabled_label.setAlignment(Qt.AlignCenter)
+                disabled_label.setStyleSheet("color: #666; font-size: 11px; padding: 5px;")
+                layout.addWidget(disabled_label)
     
-    def create_buttons(self):
-        """Create buttons based on mode"""
-        self.button_layout = QHBoxLayout()
-        
+    def handle_ok(self):
+        """Handle OK button click from date range tab"""
+        self.accept()
+    
+    def handle_exit(self):
+        """Handle Exit button click from date range tab"""
         if self.manual_mode:
-            # Manual mode: Just OK and Exit buttons centered
-            self.ok_button = QPushButton("OK")
-            self.exit_button = QPushButton("Exit")
-            
-            self.button_layout.addStretch()
-            self.button_layout.addWidget(self.ok_button)
-            self.button_layout.addWidget(self.exit_button)
-            self.button_layout.addStretch()
-            
-            # Connect signals
-            self.ok_button.clicked.connect(self.accept)
-            self.exit_button.clicked.connect(self.handle_terminate_process)
-            
+            self.handle_terminate_process()
         else:
-            # Auto mode: OK, Use Auto Date, and Exit buttons with default styling
-            self.ok_button = QPushButton("OK")
-            self.use_auto_date_button = QPushButton("Use Auto Date")
-            self.exit_button = QPushButton("Exit")
-            
-            # Layout: OK (left), center area with Use Auto Date and Exit
-            self.button_layout.addWidget(self.ok_button)
-            self.button_layout.addStretch()
-            self.button_layout.addWidget(self.use_auto_date_button)
-            self.button_layout.addWidget(self.exit_button)
-            self.button_layout.addStretch()
-            
-            # Connect signals
-            self.ok_button.clicked.connect(self.accept)
-            self.use_auto_date_button.clicked.connect(self.handle_use_auto_date)
-            self.exit_button.clicked.connect(self.handle_terminate_process)
+            self.handle_terminate_process()
+    
+    def handle_use_auto_date(self):
+        """Handle Use Auto Date button click from date range tab"""
+        # Stop timers
+        if hasattr(self, 'countdown_timer'):
+            self.countdown_timer.stop()
+        if hasattr(self, 'timeout_timer'):
+            self.timeout_timer.stop()
+        
+        # Set auto date flags
+        date_range = self.date_range_tab.result_obj
+        date_range.cancelled = True
+        date_range.use_auto_date = True
+        date_range.user_terminated = False
+        
+        self.reject()
     
     def update_countdown(self):
         """Update the countdown timer display"""
-        if not self.manual_mode:
+        if not self.manual_mode and not self.timeout_disabled:
             self.remaining_seconds -= 1
             self.countdown_label.setText(f"⏱️ Auto date will be used in {self.remaining_seconds} seconds")
             self.progress_bar.setValue(self.remaining_seconds)
@@ -147,7 +153,7 @@ class EnhancedSharePointAutomationApp(QDialog):
     
     def handle_timeout(self):
         """Handle timeout in auto mode"""
-        if not self.manual_mode:
+        if not self.manual_mode and not self.timeout_disabled:
             self.timed_out = True
             self.countdown_timer.stop()
             self.countdown_label.setText("⏱️ Timeout - using auto date calculation")
@@ -176,22 +182,6 @@ class EnhancedSharePointAutomationApp(QDialog):
         date_range = self.date_range_tab.result_obj
         date_range.cancelled = True
         date_range.user_terminated = True
-        
-        self.reject()
-    
-    def handle_use_auto_date(self):
-        """Handle use auto date button"""
-        # Stop timers
-        if hasattr(self, 'countdown_timer'):
-            self.countdown_timer.stop()
-        if hasattr(self, 'timeout_timer'):
-            self.timeout_timer.stop()
-        
-        # Set auto date flags
-        date_range = self.date_range_tab.result_obj
-        date_range.cancelled = True
-        date_range.use_auto_date = True
-        date_range.user_terminated = False
         
         self.reject()
     

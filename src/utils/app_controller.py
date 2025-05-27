@@ -238,27 +238,55 @@ def get_date_range(manual_mode):
     
     # Get the configured timeout from settings
     settings = get_settings()
-    timeout_seconds = int(settings.get('general', 'auto_mode_timeout', '30'))
-    write_log(f"Using configured timeout of {timeout_seconds} seconds", "CYAN")
+    timeout_setting = settings.get('general', 'auto_mode_timeout', '30')
     
-    # Show the date selection dialog
-    date_range = None
-    if manual_mode:
-        # In manual mode, no timeout
-        write_log("Showing date range selection dialog in manual mode...", "YELLOW")
-        date_range = show_tabbed_date_range_selection(manual_mode=True)
-        
-        # If user terminated in manual mode, exit the program
-        if date_range and date_range.user_terminated:
-            write_log("User chose to exit in manual mode", "YELLOW")
-            _USER_TERMINATED = True
-            return None
+    # Handle "off" timeout setting
+    if timeout_setting.lower() == 'off' or timeout_setting == '0':
+        if manual_mode:
+            # In manual mode, still show GUI even if timeout is off
+            write_log("Manual mode: showing date range selection dialog...", "YELLOW")
+            date_range = show_tabbed_date_range_selection(manual_mode=True)
+            
+            # If user terminated in manual mode, exit the program
+            if date_range and date_range.user_terminated:
+                write_log("User chose to exit in manual mode", "YELLOW")
+                _USER_TERMINATED = True
+                return None
+        else:
+            # In auto mode with timeout off, skip GUI and use auto date calculation
+            write_log("Auto mode with timeout disabled: skipping GUI and using auto date calculation", "YELLOW")
+            date_range = get_automatic_date_range()
+            if not date_range:
+                write_log("Failed to calculate automatic date range", "RED")
+                return None
+            return date_range
     else:
-        # In automatic mode, show dialog with configured timeout
-        write_log(f"Showing date range selection dialog with {timeout_seconds}-second timeout...", "YELLOW")
-        write_log("Options: OK (use selected dates), Use Auto Date (skip to calculated dates), Cancel Process (terminate)", "CYAN")
+        try:
+            timeout_seconds = int(timeout_setting)
+            write_log(f"Using configured timeout of {timeout_seconds} seconds", "CYAN")
+        except ValueError:
+            # Fallback to default if the setting is invalid
+            timeout_seconds = 30
+            write_log(f"Invalid timeout setting '{timeout_setting}', using default 30 seconds", "YELLOW")
         
-        date_range = show_tabbed_date_range_selection(manual_mode=False, timeout_seconds=timeout_seconds)
+        # Show the date selection dialog
+        date_range = None
+        if manual_mode:
+            # In manual mode, no timeout
+            write_log("Showing date range selection dialog in manual mode...", "YELLOW")
+            date_range = show_tabbed_date_range_selection(manual_mode=True)
+            
+            # If user terminated in manual mode, exit the program
+            if date_range and date_range.user_terminated:
+                write_log("User chose to exit in manual mode", "YELLOW")
+                _USER_TERMINATED = True
+                return None
+        else:
+            # In automatic mode, show dialog with configured timeout
+            write_log(f"Showing date range selection dialog with {timeout_seconds}-second timeout...", "YELLOW")
+            write_log("Options: OK (use selected dates), Use Auto Date (skip to calculated dates), Cancel Process (terminate)", "CYAN")
+            
+            date_range = show_tabbed_date_range_selection(manual_mode=False, timeout_seconds=timeout_seconds)
     
     # Handle the different outcomes
     if date_range:
@@ -273,7 +301,7 @@ def get_date_range(manual_mode):
             if date_range.use_auto_date:
                 write_log("User chose to use auto date calculation", "YELLOW")
             else:
-                write_log("Dialog timed out. Using automatic date range calculation", "YELLOW")
+                write_log("Dialog was cancelled. Using automatic date range calculation", "YELLOW")
             
             # Use automatic date calculation
             date_range = get_automatic_date_range()

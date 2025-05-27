@@ -474,7 +474,7 @@ class WeeklyReportExtractor:
     /* Override for "Pending" in status column only */
     table.weekly-report td:last-child.pending {
         background-color: #ffeb9c !important;
-        color: #9c5700;
+        color: #000000;
     }
 
     /* Override for "Completed" in status column only */
@@ -489,6 +489,13 @@ class WeeklyReportExtractor:
         color: inherit !important;
     }
 
+    /* Completed by rows - yellow background and red text */
+    tr.completed-by-row td {
+        background-color: #ffeb9c !important;
+        color: #ff0000 !important;
+        font-weight: bold;
+    }
+
     /* Force background inheritance for empty cells */
     td:empty {
         background-color: inherit !important;
@@ -500,15 +507,28 @@ class WeeklyReportExtractor:
         
         # Process each row of data
         for row_idx, row in enumerate(data):
+            # Check if this is one of the last 2 rows
+            is_last_two_rows = row_idx >= len(data) - 2
+            
+            # Check if any cell in this row contains "completed by" (case insensitive)
+            contains_completed_by = False
+            if is_last_two_rows:
+                for cell in row:
+                    if 'completed by' in cell.get('value', '').lower():
+                        contains_completed_by = True
+                        break
+            
             # Check if this is a section header row
             is_section_header = False
-            if row_idx > 1 and row[0]['value']:
+            if row_idx > 1 and row[0]['value'] and not contains_completed_by:  # Don't treat "completed by" rows as section headers
                 first_cell = row[0]['value']
                 if any(header in first_cell for header in ["Applied MFA Method", "ARP Invalid", "Accounts with Manager", "No AD", "GID assigned"]):
                     is_section_header = True
             
-            # Start row
-            if is_section_header:
+            # Start row with appropriate class
+            if contains_completed_by:
+                html += '<tr class="completed-by-row">\n'
+            elif is_section_header:
                 html += '<tr class="section-header">\n'
             else:
                 html += '<tr>\n'
@@ -528,7 +548,10 @@ class WeeklyReportExtractor:
                 is_last_column = (col_idx == max_cols - 1)
                 
                 # Special styling for different cell types
-                if is_section_header:
+                if contains_completed_by:
+                    # "Completed by" row - all cells get yellow background and red text
+                    html += f'  <td style="background-color: #ffeb9c !important; color: #ff0000 !important; font-weight: bold;">{cell_value}</td>\n'
+                elif is_section_header:
                     # Section header - all cells get blue background
                     html += f'  <td style="background-color: #ddebf7 !important; font-weight: bold;">{cell_value}</td>\n'
                 elif is_last_column:
@@ -537,6 +560,12 @@ class WeeklyReportExtractor:
                         html += f'  <td class="pending">{cell_value}</td>\n'
                     elif cell_value == "Completed":
                         html += f'  <td class="completed">{cell_value}</td>\n'
+                    else:
+                        html += f'  <td>{cell_value}</td>\n'
+                elif col_idx == 1:
+                    # Second column (Incident Ticket) - red text if starts with "inc"
+                    if cell_value.lower().startswith('inc'):
+                        html += f'  <td style="color: red; font-weight: bold;">{cell_value}</td>\n'
                     else:
                         html += f'  <td>{cell_value}</td>\n'
                 else:

@@ -37,7 +37,7 @@ class WeeklyReportTab(QWidget):
         main_layout.setContentsMargins(20, 20, 20, 20)
         
         # Create header
-        header_label = QLabel("Weekly Report Viewer")
+        header_label = QLabel("Generate Report from Excel")
         header_font = QFont("Segoe UI", 14)
         header_font.setBold(True)
         header_label.setFont(header_font)
