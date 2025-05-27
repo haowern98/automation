@@ -21,7 +21,13 @@ class SettingsManager:
                 "gsn_search_directory": os.path.join(os.environ.get('USERPROFILE', ''), 'Downloads'),
                 "er_search_directory": os.path.join(os.environ.get('USERPROFILE', ''), 'Downloads'),
                 "gsn_file_pattern": "alm_hardware",
-                "er_file_pattern": "data"
+                "er_file_pattern": "data",
+                "weekly_report_file_path": os.path.join(
+            os.environ.get('USERPROFILE', ''),
+            'DPDHL',
+            'SM Team - SG - AD EDS, MFA, GSN VS AD, GSN VS ER Weekly Report',
+            'Weekly Report 2025 - Copy.xlsx'
+                 )
             },
             "general": {
                 "auto_mode_timeout": "30",

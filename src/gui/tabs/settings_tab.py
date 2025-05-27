@@ -1,7 +1,7 @@
 """
 Settings Tab
 
-Updated tab for configuring application settings with "Off" option for timeout.
+Tab for configuring application settings including file paths and general preferences.
 """
 from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QTabWidget, QLabel, QGroupBox,
                              QGridLayout, QComboBox, QCheckBox, QPushButton, QLineEdit,
@@ -61,18 +61,18 @@ class SettingsTab(QWidget):
         timeout_group = QGroupBox("Auto Mode Timeout")
         timeout_layout = QGridLayout(timeout_group)
         
-        # Add timeout dropdown with "Off" option
+        # Add timeout dropdown
         timeout_layout.addWidget(QLabel("Auto mode timeout:"), 0, 0)
         self.timeout_dropdown = QComboBox()
-        self.timeout_dropdown.addItems(["Off", "10 seconds", "20 seconds", "30 seconds", "45 seconds", "60 seconds", "90 seconds", "120 seconds"])
+        self.timeout_dropdown.addItems(["10 seconds", "20 seconds", "30 seconds", "45 seconds", "60 seconds", "90 seconds", "120 seconds"])
         
-        # Set default selection to 30 seconds (index 3, since "Off" is now index 0)
-        self.timeout_dropdown.setCurrentIndex(3)
+        # Set default selection to 30 seconds (index 2)
+        self.timeout_dropdown.setCurrentIndex(2)
         
         timeout_layout.addWidget(self.timeout_dropdown, 0, 1)
         
         # Add help text
-        timeout_help = QLabel("Time before the date selection dialog automatically uses auto date in auto mode. Select 'Off' to disable timeout.")
+        timeout_help = QLabel("Time before the date selection dialog automatically uses auto date in auto mode")
         timeout_help.setStyleSheet("color: gray; font-size: 10px;")
         timeout_layout.addWidget(timeout_help, 1, 0, 1, 2)
         
@@ -186,6 +186,27 @@ class SettingsTab(QWidget):
         
         layout.addWidget(er_group)
         
+        # Create Weekly Report File Settings Group
+        weekly_group = QGroupBox("Weekly Report File Settings")
+        weekly_layout = QGridLayout(weekly_group)
+        
+        # Weekly Report File Path
+        weekly_layout.addWidget(QLabel("Weekly Report File:"), 0, 0)
+        self.weekly_report_path_edit = QLineEdit()
+        self.weekly_report_path_edit.setPlaceholderText("Enter path to Weekly Report Excel file")
+        weekly_layout.addWidget(self.weekly_report_path_edit, 0, 1)
+        
+        self.weekly_browse_button = QPushButton("Browse...")
+        self.weekly_browse_button.clicked.connect(self.browse_weekly_report_file)
+        weekly_layout.addWidget(self.weekly_browse_button, 0, 2)
+        
+        # Add info label
+        weekly_info = QLabel("Path to the Weekly Report Excel file used for both reading and writing data")
+        weekly_info.setStyleSheet("color: gray; font-size: 10px;")
+        weekly_layout.addWidget(weekly_info, 1, 1, 1, 2)
+        
+        layout.addWidget(weekly_group)
+        
         # Add save button
         save_button = QPushButton("Save Settings")
         save_button.setDefault(False)  # Set to False to remove default status
@@ -228,6 +249,21 @@ class SettingsTab(QWidget):
         if directory:
             self.er_directory_edit.setText(directory)
     
+    def browse_weekly_report_file(self):
+        """Browse for Weekly Report file"""
+        import os
+        
+        current_path = self.weekly_report_path_edit.text()
+        if not current_path:
+            current_path = os.environ.get('USERPROFILE', '')
+        
+        file_path, _ = QFileDialog.getOpenFileName(
+            self, "Select Weekly Report Excel File", current_path,
+            "Excel Files (*.xlsx *.xls);;All Files (*)")
+        
+        if file_path:
+            self.weekly_report_path_edit.setText(file_path)
+    
     def load_current_settings(self):
         """Load current settings into the dialog"""
         # Load GSN settings
@@ -243,19 +279,18 @@ class SettingsTab(QWidget):
         
         self.er_directory_edit.setText(er_dir)
         self.er_pattern_edit.setText(er_pattern)
+        
+        # Load Weekly Report settings
+        weekly_path = self.settings_manager.get('file_paths', 'weekly_report_file_path', '')
+        self.weekly_report_path_edit.setText(weekly_path)
     
     def load_timeout_setting(self):
         """Load timeout setting from settings"""
         # Default to 30 seconds if not set
         timeout_value = self.settings_manager.get('general', 'auto_mode_timeout', '30')
         
-        # Handle "Off" setting
-        if timeout_value.lower() == 'off' or timeout_value == '0':
-            self.timeout_dropdown.setCurrentIndex(0)  # "Off" is at index 0
-            return
-        
         # Find the matching index in the dropdown
-        for i in range(1, self.timeout_dropdown.count()):  # Start from 1 to skip "Off"
+        for i in range(self.timeout_dropdown.count()):
             if timeout_value in self.timeout_dropdown.itemText(i):
                 self.timeout_dropdown.setCurrentIndex(i)
                 break
@@ -270,27 +305,13 @@ class SettingsTab(QWidget):
         """Save all settings"""
         try:
             # Get values from UI controls
-            
-            # Save timeout setting
-            timeout_text = self.timeout_dropdown.currentText()
-            if timeout_text == "Off":
-                timeout_value = "off"
-            else:
-                timeout_value = timeout_text.split()[0]  # Extract just the number
-            self.settings_manager.set('general', 'auto_mode_timeout', timeout_value)
-            
-            # Save terminal visibility setting if the checkbox exists
-            if hasattr(self, 'show_terminal_checkbox'):
-                show_terminal = self.show_terminal_checkbox.isChecked()
-                self.settings_manager.set('general', 'show_terminal', show_terminal)
-            
-            # Get file path settings
             gsn_dir = self.gsn_directory_edit.text().strip()
             er_dir = self.er_directory_edit.text().strip()
             gsn_pattern = self.gsn_pattern_edit.text().strip()
             er_pattern = self.er_pattern_edit.text().strip()
+            weekly_path = self.weekly_report_path_edit.text().strip()
             
-            # Validate file path settings
+            # Validate inputs
             import os
             if gsn_dir and not os.path.exists(gsn_dir):
                 QMessageBox.warning(self, "Invalid Directory", 
@@ -300,6 +321,11 @@ class SettingsTab(QWidget):
             if er_dir and not os.path.exists(er_dir):
                 QMessageBox.warning(self, "Invalid Directory", 
                                 f"ER search directory does not exist:\n{er_dir}")
+                return
+            
+            if weekly_path and not os.path.exists(weekly_path):
+                QMessageBox.warning(self, "Invalid File Path", 
+                                f"Weekly Report file does not exist:\n{weekly_path}")
                 return
             
             # Check if patterns are not empty
@@ -313,11 +339,22 @@ class SettingsTab(QWidget):
                                 "ER file pattern cannot be empty")
                 return
             
+            # Save timeout setting
+            timeout_text = self.timeout_dropdown.currentText()
+            timeout_value = timeout_text.split()[0]  # Extract just the number
+            self.settings_manager.set('general', 'auto_mode_timeout', timeout_value)
+            
+            # Save terminal visibility setting if the checkbox exists
+            if hasattr(self, 'show_terminal_checkbox'):
+                show_terminal = self.show_terminal_checkbox.isChecked()
+                self.settings_manager.set('general', 'show_terminal', show_terminal)
+            
             # Save file path settings
             self.settings_manager.set('file_paths', 'gsn_search_directory', gsn_dir)
             self.settings_manager.set('file_paths', 'er_search_directory', er_dir)
             self.settings_manager.set('file_paths', 'gsn_file_pattern', gsn_pattern)
             self.settings_manager.set('file_paths', 'er_file_pattern', er_pattern)
+            self.settings_manager.set('file_paths', 'weekly_report_file_path', weekly_path)
             
             # Save settings to file
             if self.settings_manager.save_settings():

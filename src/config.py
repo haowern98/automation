@@ -9,7 +9,25 @@ DATA_DIR = os.path.join(BASE_DIR, "data")
 
 # File paths
 USER_PROFILE = os.environ.get('USERPROFILE', '')
-SYNCED_FILE_PATH = os.path.join(USER_PROFILE, 'DPDHL', 'SM Team - SG - AD EDS, MFA, GSN VS AD, GSN VS ER Weekly Report', 'Weekly Report 2025 - Copy.xlsx')
+
+def get_weekly_report_file_path():
+    """Get the weekly report file path from settings, with fallback to default"""
+    try:
+        from src.gui.settings_dialog import get_settings
+        settings = get_settings()
+        weekly_path = settings.get('file_paths', 'weekly_report_file_path', '')
+        
+        if weekly_path and os.path.exists(weekly_path):
+            return weekly_path
+        else:
+            # Fallback to default hardcoded path
+            return os.path.join(USER_PROFILE, 'DPDHL', 'SM Team - SG - AD EDS, MFA, GSN VS AD, GSN VS ER Weekly Report', 'Weekly Report 2025 - Copy.xlsx')
+    except Exception:
+        # If settings can't be loaded, use hardcoded default
+        return os.path.join(USER_PROFILE, 'DPDHL', 'SM Team - SG - AD EDS, MFA, GSN VS AD, GSN VS ER Weekly Report', 'Weekly Report 2025 - Copy.xlsx')
+
+# Use the function to get the path
+SYNCED_FILE_PATH = get_weekly_report_file_path()
 
 # Data files - Now correctly pointing to project_root/data/
 GSN_DATA_FILE = os.path.join(DATA_DIR, "gsn_data.json")

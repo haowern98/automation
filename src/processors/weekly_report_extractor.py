@@ -33,18 +33,35 @@ class WeeklyReportExtractor:
         Args:
             excel_file_path (str): Path to the Excel file
         """
-        self.excel_file_path = excel_file_path
         self.temp_files = []  # Track temporary files for cleanup
         
-        # If no path is provided, use the default path
+        # If no path is provided, get from settings first, then fallback to default
         if not excel_file_path:
-            user_profile = os.environ.get('USERPROFILE', '')
-            self.excel_file_path = os.path.join(
-                user_profile, 
-                'DPDHL', 
-                'SM Team - SG - AD EDS, MFA, GSN VS AD, GSN VS ER Weekly Report', 
-                'Weekly Report 2025 - Copy.xlsx'
-            )
+            try:
+                from src.gui.settings_dialog import get_settings
+                settings = get_settings()
+                configured_path = settings.get('file_paths', 'weekly_report_file_path', '')
+                
+                if configured_path and os.path.exists(configured_path):
+                    self.excel_file_path = configured_path
+                else:
+                    # Fallback to default hardcoded path
+                    self.excel_file_path = self._get_default_path()
+            except Exception:
+                # If settings can't be loaded, use default hardcoded path
+                self.excel_file_path = self._get_default_path()
+        else:
+            self.excel_file_path = excel_file_path
+    
+    def _get_default_path(self):
+        """Get the default hardcoded path as fallback"""
+        user_profile = os.environ.get('USERPROFILE', '')
+        return os.path.join(
+            user_profile, 
+            'DPDHL', 
+            'SM Team - SG - AD EDS, MFA, GSN VS AD, GSN VS ER Weekly Report', 
+            'Weekly Report 2025 - Copy.xlsx'
+        )
     
     def set_excel_file_path(self, excel_file_path):
         """
@@ -426,10 +443,10 @@ class WeeklyReportExtractor:
         if not data:
             return "<p>No data found for the specified date range.</p>"
         
-        # Get the number of columns from the first row
-        num_columns = len(data[0]) if data else 0
+        # Fixed column count - weekly reports should have exactly 4 columns
+        max_cols = 4
         
-        # First, generate CSS with explicit column selectors
+        # Generate CSS with proper styling
         html = '''
     <style>
     /* Base table styling */
@@ -446,59 +463,92 @@ class WeeklyReportExtractor:
         border: 1px solid #dddddd;
         padding: 8px;
         vertical-align: top;
-        width: 25%; /* Ensure equal column widths */
+        word-wrap: break-word;
     }
+
+    /* Define specific column widths */
+    table.weekly-report td:nth-child(1) { width: 25%; } /* Updates column */
+    table.weekly-report td:nth-child(2) { width: 15%; } /* Incident Ticket */
+    table.weekly-report td:nth-child(3) { width: 45%; } /* Remarks */
+    table.weekly-report td:nth-child(4) { width: 15%; } /* Status */
 
     /* First row (date range) - gray background */
     table.weekly-report tr:first-child td {
         background-color: #f0f0f5 !important;
+        font-weight: bold;
+        text-align: left;
     }
 
     /* Second row (column headers) - red text */
     table.weekly-report tr:nth-child(2) td {
         color: #ff0000;
         font-weight: bold;
+        text-align: center;
+        background-color: #ffffff;
     }
 
     /* Section headers - light blue background spans full row */
     tr.section-header td {
         background-color: #ddebf7 !important;
         font-weight: bold;
+        text-align: left;
     }
 
-    /* Status column - force all cells to have white background by default */
-    table.weekly-report td:last-child {
+    /* "Completed by for" rows - yellow background for entire row */
+    tr.completed-by-row td {
+        background-color: #ffeb9c !important;
+        color: #9c5700;
+    }
+
+    /* Status column - default white background */
+    table.weekly-report td:nth-child(4) {
         background-color: white !important;
+        text-align: center;
     }
 
     /* Override for "Pending" in status column only */
-    table.weekly-report td:last-child.pending {
+    table.weekly-report td:nth-child(4).pending {
         background-color: #ffeb9c !important;
-        color: #000000;
+        color: #9c5700;
     }
 
     /* Override for "Completed" in status column only */
-    table.weekly-report td:last-child.completed {
+    table.weekly-report td:nth-child(4).completed {
         background-color: #c6efce !important;
         color: #006100;
     }
 
     /* Ensure section header backgrounds override status column defaults */
-    tr.section-header td:last-child {
+    tr.section-header td:nth-child(4) {
         background-color: #ddebf7 !important;
         color: inherit !important;
+        text-align: left;
     }
 
-    /* Completed by rows - yellow background and red text */
-    tr.completed-by-row td {
+    /* Ensure completed-by-row backgrounds override status column defaults */
+    tr.completed-by-row td:nth-child(4) {
         background-color: #ffeb9c !important;
+        color: #9c5700;
+        text-align: center;
+    }
+
+    /* INC cells in column 2 - red font */
+    table.weekly-report td.inc-cell {
         color: #ff0000 !important;
         font-weight: bold;
     }
 
-    /* Force background inheritance for empty cells */
-    td:empty {
-        background-color: inherit !important;
+    /* Data rows */
+    table.weekly-report tr:not(:first-child):not(:nth-child(2)):not(.section-header):not(.completed-by-row) td:nth-child(1) {
+        text-align: left;
+    }
+
+    table.weekly-report tr:not(:first-child):not(:nth-child(2)):not(.section-header):not(.completed-by-row) td:nth-child(2) {
+        text-align: center;
+    }
+
+    table.weekly-report tr:not(:first-child):not(:nth-child(2)):not(.section-header):not(.completed-by-row) td:nth-child(3) {
+        text-align: left;
     }
     </style>
 
@@ -507,70 +557,68 @@ class WeeklyReportExtractor:
         
         # Process each row of data
         for row_idx, row in enumerate(data):
-            # Check if this is one of the last 2 rows
-            is_last_two_rows = row_idx >= len(data) - 2
-            
-            # Check if any cell in this row contains "completed by" (case insensitive)
-            contains_completed_by = False
-            if is_last_two_rows:
-                for cell in row:
-                    if 'completed by' in cell.get('value', '').lower():
-                        contains_completed_by = True
-                        break
-            
             # Check if this is a section header row
             is_section_header = False
-            if row_idx > 1 and row[0]['value'] and not contains_completed_by:  # Don't treat "completed by" rows as section headers
+            if row_idx > 1 and len(row) > 0 and row[0]['value']:
                 first_cell = row[0]['value']
-                if any(header in first_cell for header in ["Applied MFA Method", "ARP Invalid", "Accounts with Manager", "No AD", "GID assigned"]):
+                section_keywords = ["Applied MFA Method", "ARP Invalid", "Accounts with Manager", 
+                                "No AD", "GID assigned", "Accounts with", "Manager/ARP"]
+                if any(keyword in first_cell for keyword in section_keywords):
                     is_section_header = True
             
+            # Check if this is a "completed by for" row (among last two rows)
+            is_completed_by_row = False
+            if row_idx >= len(data) - 2:  # Last two rows
+                # Check if any cell in the row contains "completed by for"
+                for cell in row:
+                    if 'completed by for' in cell.get('value', '').lower():
+                        is_completed_by_row = True
+                        break
+            
             # Start row with appropriate class
-            if contains_completed_by:
-                html += '<tr class="completed-by-row">\n'
-            elif is_section_header:
+            if is_section_header:
                 html += '<tr class="section-header">\n'
+            elif is_completed_by_row:
+                html += '<tr class="completed-by-row">\n'
             else:
                 html += '<tr>\n'
             
-            # Ensure we have enough cells to fill the table width
-            # Get the maximum number of columns from all rows
-            max_cols = max(len(r) for r in data) if data else 4
+            # Handle first row (date range) - should span all columns
+            if row_idx == 0:
+                date_value = row[0]['value'] if len(row) > 0 else ''
+                html += f'  <td colspan="4">{date_value}</td>\n'
             
-            # Process each cell in the row, padding with empty cells if needed
-            for col_idx in range(max_cols):
-                # Get cell value if it exists, otherwise empty
-                if col_idx < len(row):
-                    cell_value = row[col_idx].get('value', '')
-                else:
-                    cell_value = ''
-                
-                is_last_column = (col_idx == max_cols - 1)
-                
-                # Special styling for different cell types
-                if contains_completed_by:
-                    # "Completed by" row - all cells get yellow background and red text
-                    html += f'  <td style="background-color: #ffeb9c !important; color: #ff0000 !important; font-weight: bold;">{cell_value}</td>\n'
-                elif is_section_header:
-                    # Section header - all cells get blue background
-                    html += f'  <td style="background-color: #ddebf7 !important; font-weight: bold;">{cell_value}</td>\n'
-                elif is_last_column:
-                    # Status column - special colors for Pending/Completed
-                    if cell_value == "Pending":
-                        html += f'  <td class="pending">{cell_value}</td>\n'
-                    elif cell_value == "Completed":
-                        html += f'  <td class="completed">{cell_value}</td>\n'
+            # Handle section headers - should span all columns
+            elif is_section_header:
+                section_value = row[0]['value'] if len(row) > 0 else ''
+                html += f'  <td colspan="4">{section_value}</td>\n'
+            
+            # Handle regular rows - exactly 4 columns
+            else:
+                for col_idx in range(max_cols):
+                    # Get cell value if it exists, otherwise empty
+                    if col_idx < len(row):
+                        cell_value = row[col_idx].get('value', '')
                     else:
-                        html += f'  <td>{cell_value}</td>\n'
-                elif col_idx == 1:
-                    # Second column (Incident Ticket) - red text if starts with "inc"
-                    if cell_value.lower().startswith('inc'):
-                        html += f'  <td style="color: red; font-weight: bold;">{cell_value}</td>\n'
+                        cell_value = ''
+                    
+                    # Check if this is column 2 (Incident Ticket) and contains "INC"
+                    is_inc_cell = (col_idx == 1 and 'INC' in cell_value)
+                    
+                    # Special styling for status column (4th column) - but not for completed-by rows
+                    if col_idx == 3 and not is_completed_by_row:  # Status column (0-indexed)
+                        if cell_value == "Pending":
+                            html += f'  <td class="pending">{cell_value}</td>\n'
+                        elif cell_value == "Completed":
+                            html += f'  <td class="completed">{cell_value}</td>\n'
+                        else:
+                            html += f'  <td>{cell_value}</td>\n'
+                    elif is_inc_cell:
+                        # INC cell in column 2 - red font
+                        html += f'  <td class="inc-cell">{cell_value}</td>\n'
                     else:
+                        # Normal cell (completed-by rows get their styling from CSS class)
                         html += f'  <td>{cell_value}</td>\n'
-                else:
-                    # Normal cell
-                    html += f'  <td>{cell_value}</td>\n'
             
             # End row
             html += '</tr>\n'

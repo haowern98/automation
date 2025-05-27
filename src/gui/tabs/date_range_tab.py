@@ -158,33 +158,58 @@ class DateRangeTab(QWidget):
     
     def update_preview(self):
         """Update the date range preview"""
-        start_date = self.start_date_picker.date().toPyDate()
-        end_date = self.end_date_picker.date().toPyDate()
-        
-        # Validate dates
-        if end_date < start_date:
-            self.status_label.setText("End date cannot be earlier than start date.")
-            self._set_ok_button_enabled(False)
-            return
-        else:
-            self.status_label.setText("")
-            self._set_ok_button_enabled(True)
-        
-        # Format the date range
-        if start_date.month == end_date.month and start_date.year == end_date.year:
-            date_range_formatted = f"{start_date.day}-{end_date.day} {start_date.strftime('%B')} {start_date.year}"
-        else:
-            date_range_formatted = f"{start_date.day} {start_date.strftime('%B')} - {end_date.day} {end_date.strftime('%B')} {end_date.year}"
-        
-        # Update preview
-        self.preview_textbox.setText(date_range_formatted)
-        
-        # Update result object
-        self.result_obj.start_date = start_date
-        self.result_obj.end_date = end_date
-        self.result_obj.date_range_formatted = date_range_formatted
-        self.result_obj.year = str(end_date.year)
-    
+        try:
+            start_date = self.start_date_picker.date().toPyDate()
+            end_date = self.end_date_picker.date().toPyDate()
+            
+            # Validate dates
+            if end_date < start_date:
+                self.status_label.setText("End date cannot be earlier than start date.")
+                if hasattr(self, 'ok_button'):
+                    self.ok_button.setEnabled(False)
+                if hasattr(self, 'generate_button'):
+                    self.generate_button.setEnabled(False)
+                return
+            else:
+                self.status_label.setText("")
+                if hasattr(self, 'ok_button'):
+                    self.ok_button.setEnabled(True)
+                if hasattr(self, 'generate_button'):
+                    self.generate_button.setEnabled(True)
+            
+            # Format the date range
+            if start_date.month == end_date.month and start_date.year == end_date.year:
+                # Same month format: "2-9 May 2025"
+                date_range_formatted = f"{start_date.day}-{end_date.day} {start_date.strftime('%B')} {start_date.year}"
+            else:
+                # Different month format: "2 May - 9 June 2025"
+                date_range_formatted = f"{start_date.day} {start_date.strftime('%B')} - {end_date.day} {end_date.strftime('%B')} {end_date.year}"
+            
+            # Update preview
+            if hasattr(self, 'preview_textbox'):
+                self.preview_textbox.setText(date_range_formatted)
+            elif hasattr(self, 'preview_label'):
+                self.preview_label.setText(date_range_formatted)
+            
+            # Update result object
+            if hasattr(self, 'result_obj'):
+                self.result_obj.start_date = start_date
+                self.result_obj.end_date = end_date
+                self.result_obj.date_range_formatted = date_range_formatted
+                self.result_obj.year = str(end_date.year)
+            
+            # Store for weekly report tab if this is the weekly report tab
+            if hasattr(self, 'current_date_range'):
+                self.current_date_range = date_range_formatted
+                
+        except Exception as e:
+            print(f"Error updating date preview: {str(e)}")
+            # Set a fallback preview
+            if hasattr(self, 'preview_textbox'):
+                self.preview_textbox.setText("Error formatting date range")
+            elif hasattr(self, 'preview_label'):
+                self.preview_label.setText("Error formatting date range")    
+                
     def _set_ok_button_enabled(self, enabled):
         """Enable or disable the OK button"""
         if hasattr(self, 'ok_button'):
