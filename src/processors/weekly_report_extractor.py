@@ -19,6 +19,7 @@ from dateutil.parser import parse
 import webbrowser
 from src.utils.logger import write_log
 from src.processors.gsn_vs_ad_extractor import GSNvsADExtractor
+from src.processors.gsn_vs_er_extractor import GSNvsERExtractor
 
 # Print diagnostic info at startup
 print("Weekly Report Extractor - Starting up...")
@@ -680,10 +681,10 @@ class WeeklyReportExtractor:
         html += '</html>'
         
         return html
-        
+            
     def extract_combined_data_for_date_range_gui(self, date_range_str):
         """
-        Extract both MFA and GSN VS AD data for the given date range (GUI version)
+        Extract MFA, GSN VS AD, and GSN VS ER data for the given date range (GUI version)
         Returns both success status and combined data for GUI error handling
         
         Args:
@@ -693,7 +694,7 @@ class WeeklyReportExtractor:
             tuple: (success: bool, combined_data: dict, error_message: str)
         """
         try:
-            write_log(f"GUI: Extracting combined MFA + GSN VS AD data for date range: {date_range_str}", "YELLOW")
+            write_log(f"GUI: Extracting combined MFA + GSN VS AD + GSN VS ER data for date range: {date_range_str}", "YELLOW")
             
             # Extract MFA data
             write_log("Extracting MFA data...", "CYAN")
@@ -702,34 +703,45 @@ class WeeklyReportExtractor:
             # Extract GSN VS AD data
             write_log("Extracting GSN VS AD data...", "CYAN")
             gsn_vs_ad_extractor = GSNvsADExtractor(self.excel_file_path)
-            gsn_success, gsn_data, gsn_error = gsn_vs_ad_extractor.extract_gsn_vs_ad_data(date_range_str)
+            gsn_ad_success, gsn_ad_data, gsn_ad_error = gsn_vs_ad_extractor.extract_gsn_vs_ad_data(date_range_str)
+            
+            # Extract GSN VS ER data
+            write_log("Extracting GSN VS ER data...", "CYAN")
+            gsn_vs_er_extractor = GSNvsERExtractor(self.excel_file_path)
+            gsn_er_success, gsn_er_data, gsn_er_error = gsn_vs_er_extractor.extract_gsn_vs_er_data(date_range_str)
             
             # Combine results
             combined_data = {
                 'mfa_data': mfa_data if mfa_success else [],
-                'gsn_vs_ad_data': gsn_data if gsn_success else [],
+                'gsn_vs_ad_data': gsn_ad_data if gsn_ad_success else [],
+                'gsn_vs_er_data': gsn_er_data if gsn_er_success else [],
                 'mfa_success': mfa_success,
-                'gsn_vs_ad_success': gsn_success,
+                'gsn_vs_ad_success': gsn_ad_success,
+                'gsn_vs_er_success': gsn_er_success,
                 'mfa_error': mfa_error,
-                'gsn_vs_ad_error': gsn_error
+                'gsn_vs_ad_error': gsn_ad_error,
+                'gsn_vs_er_error': gsn_er_error
             }
             
             # Determine overall success
-            overall_success = mfa_success or gsn_success  # Success if at least one succeeds
+            overall_success = mfa_success or gsn_ad_success or gsn_er_success  # Success if at least one succeeds
             
             # Create combined error message
             error_parts = []
             if not mfa_success and mfa_error:
                 error_parts.append(f"MFA Error: {mfa_error}")
-            if not gsn_success and gsn_error:
-                error_parts.append(f"GSN VS AD Error: {gsn_error}")
+            if not gsn_ad_success and gsn_ad_error:
+                error_parts.append(f"GSN VS AD Error: {gsn_ad_error}")
+            if not gsn_er_success and gsn_er_error:
+                error_parts.append(f"GSN VS ER Error: {gsn_er_error}")
             
             combined_error = " | ".join(error_parts) if error_parts else ""
             
             if overall_success:
                 mfa_count = len(mfa_data) if mfa_success else 0
-                gsn_count = len(gsn_data) if gsn_success else 0
-                write_log(f"GUI: Successfully extracted combined data - MFA: {mfa_count} rows, GSN VS AD: {gsn_count} rows", "GREEN")
+                gsn_ad_count = len(gsn_ad_data) if gsn_ad_success else 0
+                gsn_er_count = len(gsn_er_data) if gsn_er_success else 0
+                write_log(f"GUI: Successfully extracted combined data - MFA: {mfa_count} rows, GSN VS AD: {gsn_ad_count} rows, GSN VS ER: {gsn_er_count} rows", "GREEN")
             else:
                 write_log(f"GUI: Failed to extract any data - {combined_error}", "RED")
             
@@ -738,25 +750,31 @@ class WeeklyReportExtractor:
         except Exception as e:
             error_msg = f"Error extracting combined data: {str(e)}"
             write_log(f"GUI: {error_msg}", "RED")
-            return False, {'mfa_data': [], 'gsn_vs_ad_data': [], 'mfa_success': False, 'gsn_vs_ad_success': False, 'mfa_error': '', 'gsn_vs_ad_error': ''}, error_msg
+            return False, {
+                'mfa_data': [], 'gsn_vs_ad_data': [], 'gsn_vs_er_data': [], 
+                'mfa_success': False, 'gsn_vs_ad_success': False, 'gsn_vs_er_success': False, 
+                'mfa_error': '', 'gsn_vs_ad_error': '', 'gsn_vs_er_error': ''
+            }, error_msg
         finally:
             # Always clean up temp files
             self.cleanup_temp_files()
 
     def generate_combined_html_table(self, combined_data):
         """
-        Generate an HTML table from both MFA and GSN VS AD data
+        Generate an HTML table from MFA, GSN VS AD, and GSN VS ER data
         
         Args:
-            combined_data (dict): Dictionary containing both MFA and GSN VS AD data
+            combined_data (dict): Dictionary containing MFA, GSN VS AD, and GSN VS ER data
             
         Returns:
             str: HTML table string
         """
         mfa_data = combined_data.get('mfa_data', [])
         gsn_vs_ad_data = combined_data.get('gsn_vs_ad_data', [])
+        gsn_vs_er_data = combined_data.get('gsn_vs_er_data', [])
         mfa_success = combined_data.get('mfa_success', False)
-        gsn_success = combined_data.get('gsn_vs_ad_success', False)
+        gsn_ad_success = combined_data.get('gsn_vs_ad_success', False)
+        gsn_er_success = combined_data.get('gsn_vs_er_success', False)
         
         # Start with the same CSS as the original generate_html_table method
         html = '''
@@ -821,6 +839,21 @@ class WeeklyReportExtractor:
         color: #000000;
     }
 
+    /* GSN VS ER section headers - different background */
+    tr.gsn-vs-er-header td {
+        background-color: #fce4d6 !important;
+        font-weight: bold;
+        text-align: left;
+    }
+
+    /* GSN VS ER column headers - different styling */
+    tr.gsn-vs-er-columns td {
+        background-color: #d5e8d4 !important;
+        font-weight: bold;
+        text-align: center;
+        color: #000000;
+    }
+
     /* "Completed by for" rows - yellow background for entire row */
     tr.completed-by-row td {
         background-color: #ffeb9c !important;
@@ -875,6 +908,26 @@ class WeeklyReportExtractor:
     table.gsn-vs-ad-table td:nth-child(4) { width: 20%; } /* In AD not in GSN */
     table.gsn-vs-ad-table td:nth-child(5) { width: 17%; } /* Remarks */
     table.gsn-vs-ad-table td:nth-child(6) { width: 17%; } /* Action */
+
+    /* GSN VS ER table styling - 2 columns */
+    table.gsn-vs-er-table {
+        border-collapse: collapse;
+        width: 100%;
+        margin-bottom: 20px;
+        font-family: Arial, sans-serif;
+        table-layout: fixed;
+    }
+
+    table.gsn-vs-er-table td {
+        border: 1px solid #dddddd;
+        padding: 8px;
+        vertical-align: top;
+        word-wrap: break-word;
+    }
+
+    /* GSN VS ER column widths */
+    table.gsn-vs-er-table td:nth-child(1) { width: 50%; } /* Column D */
+    table.gsn-vs-er-table td:nth-child(2) { width: 50%; } /* Column E */
 
     /* INC cells in column 2 - red font */
     table.weekly-report td.inc-cell {
@@ -959,7 +1012,7 @@ class WeeklyReportExtractor:
             html += '<p style="color: red;">MFA data could not be loaded.</p>\n'
         
         # Add GSN VS AD section if data exists
-        if gsn_success and gsn_vs_ad_data:
+        if gsn_ad_success and gsn_vs_ad_data:
             html += '<br><h2>GSN VS AD</h2>\n'
             html += '<table class="gsn-vs-ad-table">\n'
             
@@ -1003,16 +1056,48 @@ class WeeklyReportExtractor:
             
             html += '</table>\n'
         
-        elif not gsn_success:
+        elif not gsn_ad_success:
             html += '<br><h2>GSN VS AD</h2>\n'
             html += '<p style="color: red;">GSN VS AD data could not be loaded.</p>\n'
         
-        # If neither section has data
-        if not mfa_success and not gsn_success:
+        # Add GSN VS ER section if data exists
+        if gsn_er_success and gsn_vs_er_data:
+            html += '<br><h2>GSN VS ER</h2>\n'
+            write_log(f"DEBUG: GSN VS ER data structure: {gsn_vs_er_data[:2]}", "CYAN")  # Show first 2 rows
+            html += '<table class="gsn-vs-er-table">\n'
+            
+            # Process GSN VS ER data
+            for row_idx, row in enumerate(gsn_vs_er_data):
+                html += '<tr>\n'
+                
+                # Handle exactly 2 columns (D and E)
+                for col_idx in range(2):
+                    if col_idx < len(row):
+                        cell_data = row[col_idx]
+                        cell_value = cell_data.get('value', '')
+                        cell_colour = cell_data.get('cell_colour', '#FFFFFF')
+                        font_colour = cell_data.get('font_colour', '#000000')
+                        
+                        # Apply cell styling
+                        style = f'background-color: {cell_colour}; color: {font_colour};'
+                        html += f'  <td style="{style}">{cell_value}</td>\n'
+                    else:
+                        html += f'  <td></td>\n'
+                
+                html += '</tr>\n'
+            
+            html += '</table>\n'
+        
+        elif not gsn_er_success:
+            html += '<br><h2>GSN VS ER</h2>\n'
+            html += '<p style="color: red;">GSN VS ER data could not be loaded.</p>\n'
+        
+        # If no sections have data
+        if not mfa_success and not gsn_ad_success and not gsn_er_success:
             html += '<p>No data found for the specified date range.</p>\n'
         
         return html
-
+    
     def save_html_to_file(self, html, output_path, date_range_str=None):
         """
         Save HTML content to a file with proper styling
