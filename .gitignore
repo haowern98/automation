@@ -6,7 +6,7 @@ __pycache__/
 # Build and distribution folders
 dist/
 build/
-SharePoint Automation Distribution/
+SharePoint_Automation_Distribution/
 
 # PyInstaller artifacts
 *.spec
@@ -14,3 +14,21 @@ SharePoint Automation Distribution/
 # Additional build-related files
 *.egg-info/
 .eggs/
+
+# Temporary files
+temp_*
+*.tmp
+
+# OS specific files
+.DS_Store
+Thumbs.db
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Virtual environments
+venv*/
+env/
