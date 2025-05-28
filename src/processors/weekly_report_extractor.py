@@ -20,6 +20,7 @@ import webbrowser
 from src.utils.logger import write_log
 from src.processors.gsn_vs_ad_extractor import GSNvsADExtractor
 from src.processors.gsn_vs_er_extractor import GSNvsERExtractor
+from src.processors.er_extractor import ERExtractor
 
 # Print diagnostic info at startup
 print("Weekly Report Extractor - Starting up...")
@@ -709,22 +710,30 @@ class WeeklyReportExtractor:
             write_log("Extracting GSN VS ER data...", "CYAN")
             gsn_vs_er_extractor = GSNvsERExtractor(self.excel_file_path)
             gsn_er_success, gsn_er_data, gsn_er_error = gsn_vs_er_extractor.extract_gsn_vs_er_data(date_range_str)
+
+            # Extract ER data
+            write_log("Extracting ER data...", "CYAN")
+            er_extractor = ERExtractor(self.excel_file_path)
+            er_success, er_data, er_error = er_extractor.extract_er_data(date_range_str)
             
             # Combine results
             combined_data = {
                 'mfa_data': mfa_data if mfa_success else [],
                 'gsn_vs_ad_data': gsn_ad_data if gsn_ad_success else [],
                 'gsn_vs_er_data': gsn_er_data if gsn_er_success else [],
+                'er_data': er_data if er_success else [],
                 'mfa_success': mfa_success,
                 'gsn_vs_ad_success': gsn_ad_success,
                 'gsn_vs_er_success': gsn_er_success,
+                'er_success': er_success,
                 'mfa_error': mfa_error,
                 'gsn_vs_ad_error': gsn_ad_error,
-                'gsn_vs_er_error': gsn_er_error
+                'gsn_vs_er_error': gsn_er_error,
+                'er_error': er_error
             }
             
             # Determine overall success
-            overall_success = mfa_success or gsn_ad_success or gsn_er_success  # Success if at least one succeeds
+            overall_success = mfa_success or gsn_ad_success or gsn_er_success or er_success  # Success if at least one succeeds
             
             # Create combined error message
             error_parts = []
@@ -734,6 +743,8 @@ class WeeklyReportExtractor:
                 error_parts.append(f"GSN VS AD Error: {gsn_ad_error}")
             if not gsn_er_success and gsn_er_error:
                 error_parts.append(f"GSN VS ER Error: {gsn_er_error}")
+            if not er_success and er_error:
+                error_parts.append(f"ER Error: {er_error}")
             
             combined_error = " | ".join(error_parts) if error_parts else ""
             
@@ -741,7 +752,8 @@ class WeeklyReportExtractor:
                 mfa_count = len(mfa_data) if mfa_success else 0
                 gsn_ad_count = len(gsn_ad_data) if gsn_ad_success else 0
                 gsn_er_count = len(gsn_er_data) if gsn_er_success else 0
-                write_log(f"GUI: Successfully extracted combined data - MFA: {mfa_count} rows, GSN VS AD: {gsn_ad_count} rows, GSN VS ER: {gsn_er_count} rows", "GREEN")
+                er_count = len(er_data) if er_success else 0
+                write_log(f"GUI: Successfully extracted combined data - MFA: {mfa_count} rows, GSN VS AD: {gsn_ad_count} rows, GSN VS ER: {gsn_er_count} rows, ER: {er_count} rows", "GREEN")
             else:
                 write_log(f"GUI: Failed to extract any data - {combined_error}", "RED")
             
@@ -751,9 +763,9 @@ class WeeklyReportExtractor:
             error_msg = f"Error extracting combined data: {str(e)}"
             write_log(f"GUI: {error_msg}", "RED")
             return False, {
-                'mfa_data': [], 'gsn_vs_ad_data': [], 'gsn_vs_er_data': [], 
-                'mfa_success': False, 'gsn_vs_ad_success': False, 'gsn_vs_er_success': False, 
-                'mfa_error': '', 'gsn_vs_ad_error': '', 'gsn_vs_er_error': ''
+                'mfa_data': [], 'gsn_vs_ad_data': [], 'gsn_vs_er_data': [], 'er_data': [],
+                'mfa_success': False, 'gsn_vs_ad_success': False, 'gsn_vs_er_success': False, 'er_success': False,
+                'mfa_error': '', 'gsn_vs_ad_error': '', 'gsn_vs_er_error': '', 'er_error': ''
             }, error_msg
         finally:
             # Always clean up temp files
@@ -772,9 +784,11 @@ class WeeklyReportExtractor:
         mfa_data = combined_data.get('mfa_data', [])
         gsn_vs_ad_data = combined_data.get('gsn_vs_ad_data', [])
         gsn_vs_er_data = combined_data.get('gsn_vs_er_data', [])
+        er_data = combined_data.get('er_data', [])
         mfa_success = combined_data.get('mfa_success', False)
         gsn_ad_success = combined_data.get('gsn_vs_ad_success', False)
         gsn_er_success = combined_data.get('gsn_vs_er_success', False)
+        er_success = combined_data.get('er_success', False)
         
         # Start with the same CSS as the original generate_html_table method
         html = '''
@@ -928,6 +942,34 @@ class WeeklyReportExtractor:
     /* GSN VS ER column widths */
     table.gsn-vs-er-table td:nth-child(1) { width: 50%; } /* Column D */
     table.gsn-vs-er-table td:nth-child(2) { width: 50%; } /* Column E */
+
+    /* ER table styling - 3 columns */
+    table.er-table {
+        border-collapse: collapse;
+        width: 100%;
+        margin-bottom: 20px;
+        font-family: Arial, sans-serif;
+        table-layout: fixed;
+    }
+
+    table.er-table td {
+        border: 1px solid #dddddd;
+        padding: 8px;
+        vertical-align: top;
+        word-wrap: break-word;
+    }
+
+    /* ER column widths */
+    table.er-table td:nth-child(1) { width: 33.33%; } /* Column 1 */
+    table.er-table td:nth-child(2) { width: 33.33%; } /* Column 2 */
+    table.er-table td:nth-child(3) { width: 33.34%; } /* Column 3 */
+
+    /* ER section headers - different background */
+    tr.er-header td {
+        background-color: #f2f2f2 !important;
+        font-weight: bold;
+        text-align: left;
+    }
 
     /* INC cells in column 2 - red font */
     table.weekly-report td.inc-cell {
@@ -1093,8 +1135,58 @@ class WeeklyReportExtractor:
             html += '<p style="color: red;">GSN VS ER data could not be loaded.</p>\n'
         
         # If no sections have data
-        if not mfa_success and not gsn_ad_success and not gsn_er_success:
+        if not mfa_success and not gsn_ad_success and not gsn_er_success and not er_success:
             html += '<p>No data found for the specified date range.</p>\n'
+
+        # Add ER section if data exists
+        if er_success and er_data:
+            html += '<br><h2>ER</h2>\n'
+            html += '<table class="er-table">\n'
+            
+            # Process ER data
+            for row_idx, row_data in enumerate(er_data):
+                html += '<tr>\n'
+                
+                # Special handling for first row (date range header with gray background)
+                if row_idx == 0 and 'Column1' in row_data and row_data['Column1'].get('colspan') == 3:
+                    # First row should span 3 columns with #AEAAAA background
+                    cell_content = row_data['Column1'].get('cell content', '')
+                    html += f'  <td colspan="3" style="background-color: #AEAAAA; color: #000000; font-weight: bold; text-align: center;">{cell_content}</td>\n'
+                else:
+                    # Handle exactly 3 columns (Column1, Column2, Column3)
+                    for col_num in range(1, 4):
+                        col_key = f"Column{col_num}"
+                        
+                        # Skip merged cells (columns 2 and 3 in first row)
+                        if row_idx == 0 and col_num > 1 and col_key in row_data and row_data[col_key].get('merged', False):
+                            continue
+                        
+                        if col_key in row_data:
+                            cell_data = row_data[col_key]
+                            cell_content = cell_data.get('cell content', '')
+                            cell_colour = cell_data.get('cell colour', '#FFFFFF')
+                            font_colour = cell_data.get('font colour', '#000000')
+                            
+                            # Force white background for ER section (override Excel colors) except first row
+                            if row_idx > 0:
+                                cell_colour = '#FFFFFF'
+                            
+                            # Keep original font color but ensure it's readable
+                            if font_colour == '#000000' or font_colour.upper() == '#FFFFFF':
+                                font_colour = '#000000'  # Use black text for readability
+                            
+                            style = f'background-color: {cell_colour}; color: {font_colour};'
+                            html += f'  <td style="{style}">{cell_content}</td>\n'
+                        else:
+                            html += f'  <td style="background-color: #FFFFFF; color: #000000;"></td>\n'
+                
+                html += '</tr>\n'
+            
+            html += '</table>\n'
+        
+        elif not er_success:
+            html += '<br><h2>ER</h2>\n'
+            html += '<p style="color: red;">ER data could not be loaded.</p>\n'
         
         return html
     

@@ -255,20 +255,25 @@ class WeeklyReportTab(QWidget):
             try:
                 # Check if this is combined data (dict) or regular data (list)
                 if isinstance(data, dict):
-                    # This is combined MFA + GSN VS AD data
+                    # This is combined MFA + GSN VS AD + GSN VS ER + ER data
                     html_content = self.extractor.generate_complete_html(data, self.current_date_range)
                     
                     # Count total rows for status message
                     mfa_count = len(data.get('mfa_data', []))
-                    gsn_count = len(data.get('gsn_vs_ad_data', []))
-                    total_rows = mfa_count + gsn_count
+                    gsn_ad_count = len(data.get('gsn_vs_ad_data', []))
+                    gsn_er_count = len(data.get('gsn_vs_er_data', []))
+                    er_count = len(data.get('er_data', []))
                     
                     # Create detailed status message
                     status_parts = []
                     if data.get('mfa_success', False):
                         status_parts.append(f"MFA: {mfa_count} rows")
                     if data.get('gsn_vs_ad_success', False):
-                        status_parts.append(f"GSN VS AD: {gsn_count} rows")
+                        status_parts.append(f"GSN VS AD: {gsn_ad_count} rows")
+                    if data.get('gsn_vs_er_success', False):
+                        status_parts.append(f"GSN VS ER: {gsn_er_count} rows")
+                    if data.get('er_success', False):
+                        status_parts.append(f"ER: {er_count} rows")
                     
                     status_message = f"Report generated successfully ({', '.join(status_parts)})"
                     
