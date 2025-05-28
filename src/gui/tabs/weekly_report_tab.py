@@ -18,8 +18,36 @@ except ImportError:
     WEB_ENGINE_AVAILABLE = False
 
 # Import the extraction thread
+from PyQt5.QtCore import Qt, QDate, QThread, pyqtSignal
 from src.gui.widgets.report_extraction_thread import WeeklyReportExtractionThread
 
+class CombinedWeeklyReportExtractionThread(QThread):
+    """Thread for extracting combined MFA + GSN VS AD report data without blocking the UI"""
+    
+    # Signals for communicating with the main thread
+    finished = pyqtSignal(bool, object, str)  # success, data (dict or list), error_message
+    progress = pyqtSignal(str)  # progress message
+    
+    def __init__(self, extractor, date_range_str):
+        """
+        Initialize the extraction thread
+        
+        Args:
+            extractor: WeeklyReportExtractor instance
+            date_range_str (str): Date range string to extract
+        """
+        super().__init__()
+        self.extractor = extractor
+        self.date_range_str = date_range_str
+    
+    def run(self):
+        """Run the combined extraction in a separate thread"""
+        try:
+            self.progress.emit("Starting combined MFA + GSN VS AD report extraction...")
+            success, data, error_msg = self.extractor.extract_combined_data_for_date_range_gui(self.date_range_str)
+            self.finished.emit(success, data, error_msg)
+        except Exception as e:
+            self.finished.emit(False, {}, f"Unexpected error: {str(e)}")
 
 class WeeklyReportTab(QWidget):
     """Weekly report viewer tab with date selector and HTML display"""
@@ -205,10 +233,10 @@ class WeeklyReportTab(QWidget):
         
         # Update UI for loading state
         self._update_ui_state(True)
-        self.status_label.setText(f"Generating report for: {date_range_str}")
+        self.status_label.setText(f"Generating combined MFA + GSN VS AD report for: {date_range_str}")
         
-        # Start extraction in a separate thread
-        self.extraction_thread = WeeklyReportExtractionThread(self.extractor, date_range_str)
+        # Start extraction in a separate thread using the combined method
+        self.extraction_thread = CombinedWeeklyReportExtractionThread(self.extractor, date_range_str)
         self.extraction_thread.progress.connect(self._update_progress)
         self.extraction_thread.finished.connect(self._on_extraction_finished)
         self.extraction_thread.start()
@@ -225,7 +253,29 @@ class WeeklyReportTab(QWidget):
         if success and data:
             # Generate HTML and display
             try:
-                html_content = self.extractor.generate_complete_html(data, self.current_date_range)
+                # Check if this is combined data (dict) or regular data (list)
+                if isinstance(data, dict):
+                    # This is combined MFA + GSN VS AD data
+                    html_content = self.extractor.generate_complete_html(data, self.current_date_range)
+                    
+                    # Count total rows for status message
+                    mfa_count = len(data.get('mfa_data', []))
+                    gsn_count = len(data.get('gsn_vs_ad_data', []))
+                    total_rows = mfa_count + gsn_count
+                    
+                    # Create detailed status message
+                    status_parts = []
+                    if data.get('mfa_success', False):
+                        status_parts.append(f"MFA: {mfa_count} rows")
+                    if data.get('gsn_vs_ad_success', False):
+                        status_parts.append(f"GSN VS AD: {gsn_count} rows")
+                    
+                    status_message = f"Report generated successfully ({', '.join(status_parts)})"
+                    
+                else:
+                    # This is regular MFA-only data (backward compatibility)
+                    html_content = self.extractor.generate_complete_html(data, self.current_date_range)
+                    status_message = f"Report generated successfully ({len(data)} rows)"
                 
                 # Display the HTML content
                 if WEB_ENGINE_AVAILABLE:
@@ -239,7 +289,7 @@ class WeeklyReportTab(QWidget):
                 self.current_html = html_content
                 
                 # Update status
-                self.status_label.setText(f"Report generated successfully ({len(data)} rows)")
+                self.status_label.setText(status_message)
                 
                 # Enable export buttons
                 self.export_html_button.setEnabled(True)

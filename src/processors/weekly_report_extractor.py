@@ -18,6 +18,7 @@ import tempfile
 from dateutil.parser import parse
 import webbrowser
 from src.utils.logger import write_log
+from src.processors.gsn_vs_ad_extractor import GSNvsADExtractor
 
 # Print diagnostic info at startup
 print("Weekly Report Extractor - Starting up...")
@@ -631,16 +632,22 @@ class WeeklyReportExtractor:
     def generate_complete_html(self, data, date_range_str=None):
         """
         Generate complete HTML document with proper structure
+        Now supports both regular data (list) and combined data (dict)
         
         Args:
-            data (list): List of rows containing the data
+            data (list or dict): List of rows containing the data OR dict with combined MFA + GSN VS AD data
             date_range_str (str, optional): Date range string for the title
             
         Returns:
             str: Complete HTML document
         """
-        # Generate the table HTML
-        table_html = self.generate_html_table(data)
+        # Check if this is combined data (dict) or regular data (list)
+        if isinstance(data, dict):
+            # This is combined data with both MFA and GSN VS AD
+            table_html = self.generate_combined_html_table(data)
+        else:
+            # This is regular MFA-only data
+            table_html = self.generate_html_table(data)
         
         # Create complete HTML document
         html = '<!DOCTYPE html>\n'
@@ -673,7 +680,339 @@ class WeeklyReportExtractor:
         html += '</html>'
         
         return html
-    
+        
+    def extract_combined_data_for_date_range_gui(self, date_range_str):
+        """
+        Extract both MFA and GSN VS AD data for the given date range (GUI version)
+        Returns both success status and combined data for GUI error handling
+        
+        Args:
+            date_range_str (str): Date range string (e.g., '29-30 May 2025')
+            
+        Returns:
+            tuple: (success: bool, combined_data: dict, error_message: str)
+        """
+        try:
+            write_log(f"GUI: Extracting combined MFA + GSN VS AD data for date range: {date_range_str}", "YELLOW")
+            
+            # Extract MFA data
+            write_log("Extracting MFA data...", "CYAN")
+            mfa_success, mfa_data, mfa_error = self.extract_data_for_date_range_gui(date_range_str)
+            
+            # Extract GSN VS AD data
+            write_log("Extracting GSN VS AD data...", "CYAN")
+            gsn_vs_ad_extractor = GSNvsADExtractor(self.excel_file_path)
+            gsn_success, gsn_data, gsn_error = gsn_vs_ad_extractor.extract_gsn_vs_ad_data(date_range_str)
+            
+            # Combine results
+            combined_data = {
+                'mfa_data': mfa_data if mfa_success else [],
+                'gsn_vs_ad_data': gsn_data if gsn_success else [],
+                'mfa_success': mfa_success,
+                'gsn_vs_ad_success': gsn_success,
+                'mfa_error': mfa_error,
+                'gsn_vs_ad_error': gsn_error
+            }
+            
+            # Determine overall success
+            overall_success = mfa_success or gsn_success  # Success if at least one succeeds
+            
+            # Create combined error message
+            error_parts = []
+            if not mfa_success and mfa_error:
+                error_parts.append(f"MFA Error: {mfa_error}")
+            if not gsn_success and gsn_error:
+                error_parts.append(f"GSN VS AD Error: {gsn_error}")
+            
+            combined_error = " | ".join(error_parts) if error_parts else ""
+            
+            if overall_success:
+                mfa_count = len(mfa_data) if mfa_success else 0
+                gsn_count = len(gsn_data) if gsn_success else 0
+                write_log(f"GUI: Successfully extracted combined data - MFA: {mfa_count} rows, GSN VS AD: {gsn_count} rows", "GREEN")
+            else:
+                write_log(f"GUI: Failed to extract any data - {combined_error}", "RED")
+            
+            return overall_success, combined_data, combined_error
+            
+        except Exception as e:
+            error_msg = f"Error extracting combined data: {str(e)}"
+            write_log(f"GUI: {error_msg}", "RED")
+            return False, {'mfa_data': [], 'gsn_vs_ad_data': [], 'mfa_success': False, 'gsn_vs_ad_success': False, 'mfa_error': '', 'gsn_vs_ad_error': ''}, error_msg
+        finally:
+            # Always clean up temp files
+            self.cleanup_temp_files()
+
+    def generate_combined_html_table(self, combined_data):
+        """
+        Generate an HTML table from both MFA and GSN VS AD data
+        
+        Args:
+            combined_data (dict): Dictionary containing both MFA and GSN VS AD data
+            
+        Returns:
+            str: HTML table string
+        """
+        mfa_data = combined_data.get('mfa_data', [])
+        gsn_vs_ad_data = combined_data.get('gsn_vs_ad_data', [])
+        mfa_success = combined_data.get('mfa_success', False)
+        gsn_success = combined_data.get('gsn_vs_ad_success', False)
+        
+        # Start with the same CSS as the original generate_html_table method
+        html = '''
+    <style>
+    /* Base table styling */
+    table.weekly-report {
+        border-collapse: collapse;
+        width: 100%;
+        margin-bottom: 20px;
+        font-family: Arial, sans-serif;
+        table-layout: fixed;
+    }
+
+    /* Cell borders and padding */
+    table.weekly-report td {
+        border: 1px solid #dddddd;
+        padding: 8px;
+        vertical-align: top;
+        word-wrap: break-word;
+    }
+
+    /* Define specific column widths for MFA section */
+    table.weekly-report td:nth-child(1) { width: 25%; } /* Updates column */
+    table.weekly-report td:nth-child(2) { width: 15%; } /* Incident Ticket */
+    table.weekly-report td:nth-child(3) { width: 45%; } /* Remarks */
+    table.weekly-report td:nth-child(4) { width: 15%; } /* Status */
+
+    /* First row (date range) - gray background */
+    table.weekly-report tr:first-child td {
+        background-color: #f0f0f5 !important;
+        font-weight: bold;
+        text-align: left;
+    }
+
+    /* Second row (column headers) - red text */
+    table.weekly-report tr:nth-child(2) td {
+        color: #ff0000;
+        font-weight: bold;
+        text-align: center;
+        background-color: #ffffff;
+    }
+
+    /* Section headers - light blue background spans full row */
+    tr.section-header td {
+        background-color: #ddebf7 !important;
+        font-weight: bold;
+        text-align: left;
+    }
+
+    /* GSN VS AD section headers - different background */
+    tr.gsn-vs-ad-header td {
+        background-color: #e7e6e6 !important;
+        font-weight: bold;
+        text-align: left;
+    }
+
+    /* GSN VS AD column headers - different styling */
+    tr.gsn-vs-ad-columns td {
+        background-color: #ffff00 !important;
+        font-weight: bold;
+        text-align: center;
+        color: #000000;
+    }
+
+    /* "Completed by for" rows - yellow background for entire row */
+    tr.completed-by-row td {
+        background-color: #ffeb9c !important;
+        color: #9c5700;
+    }
+
+    /* Status column - default white background */
+    table.weekly-report td:nth-child(4) {
+        background-color: white !important;
+        text-align: center;
+    }
+
+    /* Override for "Pending" in status column only */
+    table.weekly-report td:nth-child(4).pending {
+        background-color: #ffeb9c !important;
+        color: #9c5700;
+    }
+
+    /* Override for "Completed" in status column only */
+    table.weekly-report td:nth-child(4).completed {
+        background-color: #c6efce !important;
+        color: #006100;
+    }
+
+    /* Ensure section header backgrounds override status column defaults */
+    tr.section-header td:nth-child(4) {
+        background-color: #ddebf7 !important;
+        color: inherit !important;
+        text-align: left;
+    }
+
+    /* GSN VS AD table styling - 6 columns */
+    table.gsn-vs-ad-table {
+        border-collapse: collapse;
+        width: 100%;
+        margin-bottom: 20px;
+        font-family: Arial, sans-serif;
+        table-layout: fixed;
+    }
+
+    table.gsn-vs-ad-table td {
+        border: 1px solid #dddddd;
+        padding: 8px;
+        vertical-align: top;
+        word-wrap: break-word;
+    }
+
+    /* GSN VS AD column widths */
+    table.gsn-vs-ad-table td:nth-child(1) { width: 20%; } /* In GSN not in AD */
+    table.gsn-vs-ad-table td:nth-child(2) { width: 13%; } /* Remarks */
+    table.gsn-vs-ad-table td:nth-child(3) { width: 13%; } /* Action */
+    table.gsn-vs-ad-table td:nth-child(4) { width: 20%; } /* In AD not in GSN */
+    table.gsn-vs-ad-table td:nth-child(5) { width: 17%; } /* Remarks */
+    table.gsn-vs-ad-table td:nth-child(6) { width: 17%; } /* Action */
+
+    /* INC cells in column 2 - red font */
+    table.weekly-report td.inc-cell {
+        color: #ff0000 !important;
+        font-weight: bold;
+    }
+    </style>
+
+    '''
+        
+        # Generate MFA section if data exists
+        if mfa_success and mfa_data:
+            html += '<table class="weekly-report">\n'
+            
+            # Process MFA data (same logic as original generate_html_table)
+            for row_idx, row in enumerate(mfa_data):
+                # Check if this is a section header row
+                is_section_header = False
+                if row_idx > 1 and len(row) > 0 and row[0]['value']:
+                    first_cell = row[0]['value']
+                    section_keywords = ["Applied MFA Method", "ARP Invalid", "Accounts with Manager", 
+                                    "No AD", "GID assigned", "Accounts with", "Manager/ARP"]
+                    if any(keyword in first_cell for keyword in section_keywords):
+                        is_section_header = True
+                
+                # Check if this is a "completed by for" row
+                is_completed_by_row = False
+                if row_idx >= len(mfa_data) - 2:
+                    for cell in row:
+                        if 'completed by for' in cell.get('value', '').lower():
+                            is_completed_by_row = True
+                            break
+                
+                # Start row with appropriate class
+                if is_section_header:
+                    html += '<tr class="section-header">\n'
+                elif is_completed_by_row:
+                    html += '<tr class="completed-by-row">\n'
+                else:
+                    html += '<tr>\n'
+                
+                # Handle first row (date range) - should span all columns
+                if row_idx == 0:
+                    date_value = row[0]['value'] if len(row) > 0 else ''
+                    html += f'  <td colspan="4">{date_value}</td>\n'
+                
+                # Handle section headers - should span all columns
+                elif is_section_header:
+                    section_value = row[0]['value'] if len(row) > 0 else ''
+                    html += f'  <td colspan="4">{section_value}</td>\n'
+                
+                # Handle regular rows - exactly 4 columns
+                else:
+                    max_cols = 4
+                    for col_idx in range(max_cols):
+                        if col_idx < len(row):
+                            cell_value = row[col_idx].get('value', '')
+                        else:
+                            cell_value = ''
+                        
+                        # Check if this is column 2 and contains "INC"
+                        is_inc_cell = (col_idx == 1 and 'INC' in cell_value)
+                        
+                        # Special styling for status column
+                        if col_idx == 3 and not is_completed_by_row:
+                            if cell_value == "Pending":
+                                html += f'  <td class="pending">{cell_value}</td>\n'
+                            elif cell_value == "Completed":
+                                html += f'  <td class="completed">{cell_value}</td>\n'
+                            else:
+                                html += f'  <td>{cell_value}</td>\n'
+                        elif is_inc_cell:
+                            html += f'  <td class="inc-cell">{cell_value}</td>\n'
+                        else:
+                            html += f'  <td>{cell_value}</td>\n'
+                
+                html += '</tr>\n'
+            
+            html += '</table>\n'
+        
+        elif not mfa_success:
+            html += '<p style="color: red;">MFA data could not be loaded.</p>\n'
+        
+        # Add GSN VS AD section if data exists
+        if gsn_success and gsn_vs_ad_data:
+            html += '<br><h2>GSN VS AD</h2>\n'
+            html += '<table class="gsn-vs-ad-table">\n'
+            
+            # Process GSN VS AD data
+            for row_idx, row in enumerate(gsn_vs_ad_data):
+                # Check if this is the main header row (contains "GSN VS AD")
+                is_main_header = False
+                if len(row) > 0 and 'GSN VS AD' in row[0].get('value', ''):
+                    is_main_header = True
+                
+                # Check if this is column headers row
+                is_column_headers = False
+                if len(row) > 0 and row[0].get('value', '') == 'In GSN not in AD':
+                    is_column_headers = True
+                
+                # Start row with appropriate class
+                if is_main_header:
+                    html += '<tr class="gsn-vs-ad-header">\n'
+                elif is_column_headers:
+                    html += '<tr class="gsn-vs-ad-columns">\n'
+                else:
+                    html += '<tr>\n'
+                
+                # Handle main header - should span all 6 columns
+                if is_main_header:
+                    header_value = row[0]['value'] if len(row) > 0 else ''
+                    html += f'  <td colspan="6">{header_value}</td>\n'
+                
+                # Handle regular rows - exactly 6 columns
+                else:
+                    max_cols = 6
+                    for col_idx in range(max_cols):
+                        if col_idx < len(row):
+                            cell_value = row[col_idx].get('value', '')
+                        else:
+                            cell_value = ''
+                        
+                        html += f'  <td>{cell_value}</td>\n'
+                
+                html += '</tr>\n'
+            
+            html += '</table>\n'
+        
+        elif not gsn_success:
+            html += '<br><h2>GSN VS AD</h2>\n'
+            html += '<p style="color: red;">GSN VS AD data could not be loaded.</p>\n'
+        
+        # If neither section has data
+        if not mfa_success and not gsn_success:
+            html += '<p>No data found for the specified date range.</p>\n'
+        
+        return html
+
     def save_html_to_file(self, html, output_path, date_range_str=None):
         """
         Save HTML content to a file with proper styling

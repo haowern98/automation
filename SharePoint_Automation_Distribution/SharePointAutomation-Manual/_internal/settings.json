@@ -1,0 +1,13 @@
+{
+    "file_paths": {
+        "gsn_search_directory": "C:/Users/haowerwu/OneDrive - DPDHL/Documents",
+        "er_search_directory": "C:/Users/haowerwu/Downloads",
+        "gsn_file_pattern": "alm_hardware",
+        "er_file_pattern": "data",
+        "weekly_report_file_path": "C:\\Users\\haowerwu\\DPDHL\\SM Team - SG - AD EDS, MFA, GSN VS AD, GSN VS ER Weekly Report\\Weekly Report 2025.xlsx"
+    },
+    "general": {
+        "auto_mode_timeout": "30",
+        "show_terminal": false
+    }
+}
