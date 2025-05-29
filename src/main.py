@@ -51,6 +51,19 @@ def main():
         from src.utils.app_controller import run_sharepoint_automation_with_loading
         success = run_sharepoint_automation_with_loading(args.manual, args.debug)
         
+        # APPLY TERMINAL SETTING AFTER LOADING SCREEN AND MAIN PROCESS COMPLETE
+        # This ensures the loading screen is not affected
+        print("DEBUG: Applying terminal visibility setting...")
+        try:
+            from src.utils.terminal_control import apply_terminal_setting
+            terminal_applied = apply_terminal_setting()
+            if terminal_applied:
+                write_log("Terminal visibility setting applied successfully", "GREEN")
+            else:
+                write_log("Terminal visibility setting could not be applied", "YELLOW")
+        except Exception as terminal_error:
+            write_log(f"Error applying terminal setting: {str(terminal_error)}", "YELLOW")
+        
         if success:
             write_log("SharePoint automation completed successfully", "GREEN")
         else:

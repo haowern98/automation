@@ -82,10 +82,11 @@ class SettingsTab(QWidget):
         
         # Add terminal visibility checkbox
         self.show_terminal_checkbox = QCheckBox("Show terminal window")
+        self.show_terminal_checkbox.stateChanged.connect(self.on_terminal_checkbox_changed)  # Connect to immediate handler
         debug_layout.addWidget(self.show_terminal_checkbox, 0, 0)
         
         # Add help text
-        terminal_help = QLabel("Show command terminal for debugging (requires restart)")
+        terminal_help = QLabel("Show/hide command terminal for debugging (applies immediately)")
         terminal_help.setStyleSheet("color: gray; font-size: 10px;")
         debug_layout.addWidget(terminal_help, 1, 0)
         
@@ -110,6 +111,29 @@ class SettingsTab(QWidget):
         self.load_debug_settings()
         
         return tab
+    
+    def on_terminal_checkbox_changed(self, state):
+        """Handle terminal checkbox change immediately"""
+        try:
+            from src.utils.terminal_control import show_terminal, hide_terminal
+            
+            if state == Qt.Checked:
+                # Show terminal immediately
+                success = show_terminal()
+                if success:
+                    print("Terminal shown successfully")
+                else:
+                    print("Could not show terminal")
+            else:
+                # Hide terminal immediately
+                success = hide_terminal()
+                if success:
+                    print("Terminal hidden successfully")
+                else:
+                    print("Could not hide terminal")
+                    
+        except Exception as e:
+            print(f"Error applying terminal visibility: {str(e)}")
     
     def _create_file_paths_tab(self):
         """Create the file paths settings tab"""
@@ -344,10 +368,9 @@ class SettingsTab(QWidget):
             timeout_value = timeout_text.split()[0]  # Extract just the number
             self.settings_manager.set('general', 'auto_mode_timeout', timeout_value)
             
-            # Save terminal visibility setting if the checkbox exists
-            if hasattr(self, 'show_terminal_checkbox'):
-                show_terminal = self.show_terminal_checkbox.isChecked()
-                self.settings_manager.set('general', 'show_terminal', show_terminal)
+            # Save terminal visibility setting (the checkbox already applied it immediately)
+            show_terminal = self.show_terminal_checkbox.isChecked()
+            self.settings_manager.set('general', 'show_terminal', show_terminal)
             
             # Save file path settings
             self.settings_manager.set('file_paths', 'gsn_search_directory', gsn_dir)
@@ -358,18 +381,7 @@ class SettingsTab(QWidget):
             
             # Save settings to file
             if self.settings_manager.save_settings():
-                # Show notification about terminal visibility if it changed
-                if hasattr(self, 'show_terminal_checkbox'):
-                    show_terminal = self.show_terminal_checkbox.isChecked()
-                    # Check if setting exists and has changed
-                    if self.settings_manager.get('general', 'show_terminal', False) != show_terminal:
-                        QMessageBox.information(self, "Settings Saved",
-                                            "Settings have been saved successfully!\n\n"
-                                            "Note: The terminal visibility setting has changed.\n"
-                                            "Please restart the application for this change to take effect.")
-                        return
-                        
-                # Standard success message
+                # Standard success message (no restart needed since terminal setting applies immediately)
                 QMessageBox.information(self, "Settings Saved", 
                                     "Settings have been saved successfully!")
             else:
