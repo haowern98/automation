@@ -27,7 +27,13 @@ class SettingsManager:
             'DPDHL',
             'SM Team - SG - AD EDS, MFA, GSN VS AD, GSN VS ER Weekly Report',
             'Weekly Report 2025 - Copy.xlsx'
-                 )
+                 ),
+                "output_directory": os.path.join(
+                os.environ.get('USERPROFILE', ''),
+                'OneDrive - DPDHL',
+                'Documents',
+                'weeklyreportlog'
+                )
             },
             "general": {
                 "auto_mode_timeout": "30",
@@ -200,7 +206,28 @@ class SettingsDialog(QDialog):
         # Create a description
         description = QLabel("Configure directories to search for files and file name patterns")
         description.setWordWrap(True)
-        
+
+        # Create Output Directory Settings Group
+        output_group = QGroupBox("Output Directory Settings")
+        output_layout = QGridLayout(output_group)
+
+        # Output Directory Path
+        output_layout.addWidget(QLabel("TXT Output Directory:"), 0, 0)
+        self.output_directory_edit = QLineEdit()
+        self.output_directory_edit.setPlaceholderText("Enter path to directory for saving TXT files")
+        output_layout.addWidget(self.output_directory_edit, 0, 1)
+
+        self.output_browse_button = QPushButton("Browse...")
+        self.output_browse_button.clicked.connect(self.browse_output_directory)
+        output_layout.addWidget(self.output_browse_button, 0, 2)
+
+        # Add info label
+        output_info = QLabel("Directory where generated TXT files will be saved")
+        output_info.setStyleSheet("color: gray; font-size: 10px;")
+        output_layout.addWidget(output_info, 1, 1, 1, 2)
+
+        layout.addWidget(output_group)
+
         # Add widgets to layout
         layout.addWidget(heading)
         layout.addWidget(description)
@@ -264,6 +291,18 @@ class SettingsDialog(QDialog):
         layout.addStretch(1)
         
         return tab
+
+    def browse_output_directory(self):
+        """Browse for output directory"""
+        current_path = self.output_directory_edit.text()
+        if not current_path:
+            current_path = os.environ.get('USERPROFILE', '')
+        
+        directory = QFileDialog.getExistingDirectory(
+            self, "Select Output Directory", current_path)
+        
+        if directory:
+             self.output_directory_edit.setText(directory)        
     
     def browse_gsn_directory(self):
         """Browse for GSN search directory"""
@@ -304,6 +343,10 @@ class SettingsDialog(QDialog):
         
         self.er_directory_edit.setText(er_dir)
         self.er_pattern_edit.setText(er_pattern)
+
+        # Load Output Directory settings
+        output_dir = self.settings_manager.get('file_paths', 'output_directory', '')
+        self.output_directory_edit.setText(output_dir)
     
     def load_timeout_setting(self):
         """Load timeout setting from settings"""
@@ -324,6 +367,7 @@ class SettingsDialog(QDialog):
             er_dir = self.er_directory_edit.text().strip()
             gsn_pattern = self.gsn_pattern_edit.text().strip()
             er_pattern = self.er_pattern_edit.text().strip()
+            output_dir = self.output_directory_edit.text().strip()
             
             # Check if directories exist
             if gsn_dir and not os.path.exists(gsn_dir):
@@ -335,6 +379,10 @@ class SettingsDialog(QDialog):
                 QMessageBox.warning(self, "Invalid Directory", 
                                    f"ER search directory does not exist:\n{er_dir}")
                 return
+
+            if output_dir and not os.path.exists(output_dir):
+                QMessageBox.warning(self, "Invalid Directory", 
+                                   f"Output directory does not exist:\n{output_dir}")
             
             # Check if patterns are not empty
             if not gsn_pattern:
@@ -352,6 +400,7 @@ class SettingsDialog(QDialog):
             self.settings_manager.set('file_paths', 'er_search_directory', er_dir)
             self.settings_manager.set('file_paths', 'gsn_file_pattern', gsn_pattern)
             self.settings_manager.set('file_paths', 'er_file_pattern', er_pattern)
+            self.settings_manager.set('file_paths', 'output_directory', output_dir) 
             
             # Save timeout setting
             timeout_text = self.timeout_dropdown.currentText()
