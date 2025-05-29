@@ -245,9 +245,10 @@ class ERExtractor:
             # Extract data starting from the found row
             body = []
             extracted_rows_count = 0
+            aeaaaa_count = 0
             
             write_log(f"Starting extraction from row {start_row_index + 1}...", "CYAN")
-            write_log("Will stop when encountering #AEAAAA color OR end of used range", "CYAN")
+            write_log("Will stop when encountering second #AEAAAA color OR end of used range", "CYAN")
             
             # Loop through each row starting from the startRowIndex (INCLUDE the date range header)
             for row_index in range(start_row_index, len(rows)):
@@ -282,6 +283,7 @@ class ERExtractor:
                     # Check for #AEAAAA color (case insensitive)
                     if cell_formatting['cell_colour'].upper() == "#AEAAAA":
                         found_aeaaaa_color = True
+                        aeaaaa_count += 1
                         write_log(f"Found #AEAAAA color at row {row_index + 1}, column {col_index + 1}", "YELLOW")
                         break
                         
@@ -290,11 +292,12 @@ class ERExtractor:
                     if cell_formatting['cell_colour'].upper() in [color.upper() for color in gray_colors]:
                         write_log(f"Found potential gray stopping color {cell_formatting['cell_colour']} at row {row_index + 1}, column {col_index + 1}", "YELLOW")
                         found_aeaaaa_color = True
+                        aeaaaa_count += 1
                         break
                 
-                # Stopping condition: found #AEAAAA color in any of the first 3 columns
-                if found_aeaaaa_color:
-                    write_log(f"Stopping at row {row_index + 1}: found #AEAAAA color", "YELLOW")
+                # Stopping condition: found second #AEAAAA color
+                if aeaaaa_count == 2:
+                    write_log(f"Stopping at row {row_index + 1}: found second #AEAAAA color", "YELLOW")
                     break
                 
                 # Check if we've reached the end of used range (all first 3 cells empty)
@@ -302,7 +305,6 @@ class ERExtractor:
                     write_log(f"Stopping at row {row_index + 1}: reached end of used range", "YELLOW")
                     break
                 
-                # Create row data for the first 3 columns (Column1, Column2, Column3)
                 # Create row data for the first 3 columns (Column1, Column2, Column3)
                 row_data = {}
 

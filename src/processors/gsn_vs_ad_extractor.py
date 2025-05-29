@@ -94,12 +94,14 @@ class GSNvsADExtractor:
         Determine the target row text to search for
         
         Args:
-            date_range_str (str): Date range string (e.g., '29-30 May 2025')
+            date_range_str (str): Date range string (e.g., '13-17 February 2025')
             
         Returns:
-            str: Target row text (e.g., '29-30 May 2025 GSN VS AD')
+            list: List of target row texts (e.g., ['13-17 February 2025 GSN VS AD', '13-17 Feb 2025 GSN VS AD'])
         """
-        return f"{date_range_str} GSN VS AD"
+        full_month_name = date_range_str
+        abbreviated_month_name = re.sub(r'(\w+)\s+(\d{4})', lambda m: m.group(1)[:3] + ' ' + m.group(2), date_range_str)
+        return [f"{full_month_name} GSN VS AD", f"{abbreviated_month_name} GSN VS AD"]
         
     def extract_gsn_vs_ad_data(self, date_range_str):
         """
@@ -107,7 +109,7 @@ class GSNvsADExtractor:
         Uses logic similar to the TypeScript version but returns list format
         
         Args:
-            date_range_str (str): Date range string (e.g., '19-23 May 2025')
+            date_range_str (str): Date range string (e.g., '13-17 February 2025')
             
         Returns:
             tuple: (success: bool, data: list, error_message: str)
@@ -124,10 +126,10 @@ class GSNvsADExtractor:
             
             # Determine worksheet name and target row
             worksheet_name = self.determine_worksheet_name(date_range_str)
-            target_row_text = self.determine_target_row_text(date_range_str)
+            target_row_texts = self.determine_target_row_text(date_range_str)
             
             write_log(f"Worksheet: '{worksheet_name}'", "CYAN")
-            write_log(f"Looking for: '{target_row_text}'", "CYAN")
+            write_log(f"Looking for: '{target_row_texts}'", "CYAN")
             
             # Load workbook with openpyxl
             workbook = openpyxl.load_workbook(self.excel_file_path, data_only=True)
@@ -150,7 +152,7 @@ class GSNvsADExtractor:
             for row_idx in range(1, max_row + 1):
                 for col_idx in range(1, min(7, max_col + 1)):  # Check first 6 columns
                     cell_value = worksheet.cell(row=row_idx, column=col_idx).value
-                    if cell_value and target_row_text in str(cell_value):
+                    if cell_value and any(target_row_text in str(cell_value) for target_row_text in target_row_texts):
                         start_row_index = row_idx
                         write_log(f"Found target at row {start_row_index}, col {col_idx}", "GREEN")
                         break
@@ -158,7 +160,7 @@ class GSNvsADExtractor:
                     break
             
             if start_row_index is None:
-                error_msg = f"Target '{target_row_text}' not found"
+                error_msg = f"Target row text '{target_row_texts}' not found"
                 write_log(error_msg, "RED")
                 workbook.close()
                 return False, [], error_msg
@@ -183,20 +185,20 @@ class GSNvsADExtractor:
                         all_columns_empty = False
                         
                         # Check if this cell contains a date range (stopping condition)
-                        if col_idx == 1 and target_row_text != str(cell_value).strip():
+                        if col_idx == 1 and not any(target_row_text in str(cell_value).strip() for target_row_text in target_row_texts):
                             # Check if this looks like another date range
-                            if 'GSN VS AD' in str(cell_value) and str(cell_value).strip() != target_row_text:
+                            if 'GSN VS AD' in str(cell_value) and not any(target_row_text in str(cell_value).strip() for target_row_text in target_row_texts):
                                 contains_date_range = True
                                 write_log(f"Found next date range at row {row_idx}: '{str(cell_value).strip()}'", "CYAN")
-                    
-                    # Add cell to row data
-                    if pd.isna(cell_value) or cell_value is None:
-                        row_data.append({'value': ''})
-                    else:
-                        row_data.append({'value': str(cell_value).strip()})
+                        
+                        # Add cell to row data
+                        if pd.isna(cell_value) or cell_value is None:
+                            row_data.append({'value': ''})
+                        else:
+                            row_data.append({'value': str(cell_value).strip()})
                 
                 # Stopping conditions (similar to TypeScript logic)
-                if all_columns_empty and not any(target_row_text in str(worksheet.cell(row=row_idx, column=c).value or '') for c in range(1, 7)):
+                if all_columns_empty and not any(target_row_text in str(worksheet.cell(row=row_idx, column=c).value or '') for target_row_text in target_row_texts for c in range(1, 7)):
                     write_log(f"Stopping at row {row_idx}: all columns empty", "YELLOW")
                     break
                 
@@ -230,6 +232,7 @@ class GSNvsADExtractor:
             import traceback
             write_log(traceback.format_exc(), "RED")
             return False, [], error_msg
+        
 def main():
     """Test function for the GSN VS AD extractor"""
     try:
