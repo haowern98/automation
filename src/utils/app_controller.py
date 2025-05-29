@@ -1,5 +1,5 @@
 """
-Enhanced Main application controller for SharePoint Automation with proper flow termination
+Enhanced Main application controller for SharePoint Automation with loading screen support
 """
 import os
 import sys
@@ -21,16 +21,106 @@ from src.config import USER_PROFILE, SYNCED_FILE_PATH, FILE_PATTERNS, AD_SEARCH,
 # Global flag to track if user wants to terminate the entire process
 _USER_TERMINATED = False
 
-def run_sharepoint_automation(manual_mode=False, debug_mode=False):
+def run_sharepoint_automation_with_loading(manual_mode=False, debug_mode=False):
     """
-    Run the SharePoint automation process
+    Run SharePoint automation with loading screen during Excel initialization
     
     Args:
         manual_mode (bool): Whether to run in manual mode
         debug_mode (bool): Whether to run in debug mode
+    """
+    write_log("Starting SharePoint automation with loading screen...", "YELLOW")
+    
+    try:
+        from src.gui.loading_screen import show_loading_during_excel_init
+        write_log("Loading screen module imported successfully", "GREEN")
         
-    Returns:
-        bool: Success status
+        # Show loading screen during Excel initialization, then continue with main process
+        write_log("Showing loading screen for Excel initialization...", "CYAN")
+        success = show_loading_during_excel_init(manual_mode, debug_mode)
+        write_log(f"Loading screen completed with success: {success}", "CYAN")
+        
+        if success:
+            # Continue with the rest of the automation process (without Excel init since it's done)
+            write_log("Starting main automation process...", "GREEN")
+            return run_sharepoint_automation_main(manual_mode, debug_mode)
+        else:
+            write_log("Excel initialization was cancelled or failed", "YELLOW")
+            return False
+            
+    except Exception as e:
+        write_log(f"Error in run_sharepoint_automation_with_loading: {str(e)}", "RED")
+        import traceback
+        write_log(traceback.format_exc(), "RED")
+        return False
+
+def run_sharepoint_automation_main(manual_mode=False, debug_mode=False):
+    """
+    Run the main SharePoint automation process (after Excel initialization is complete)
+    """
+    global _USER_TERMINATED
+    
+    try:
+        # Get date range (through GUI or automatic calculation)
+        date_range = get_date_range(manual_mode)
+        if not date_range or not date_range.is_valid:
+            if _USER_TERMINATED:
+                write_log("Process terminated by user", "YELLOW")
+                return False
+            write_log("No valid date range provided. Exiting.", "RED")
+            return False
+            
+        write_log(f"Using date range: {date_range.date_range_formatted}", "GREEN")
+        
+        # Check if user terminated after date selection
+        if _USER_TERMINATED:
+            write_log("Process terminated by user after date selection", "YELLOW")
+            return False
+        
+        # Find required files
+        file_paths = find_required_files()
+        if not file_paths:
+            return False
+            
+        # Check if user terminated during file search
+        if _USER_TERMINATED:
+            write_log("Process terminated by user during file search", "YELLOW")
+            return False
+        
+        # Process data
+        data_results = process_data(file_paths)
+        if not data_results:
+            return False
+            
+        # Check if user terminated during data processing
+        if _USER_TERMINATED:
+            write_log("Process terminated by user during data processing", "YELLOW")
+            return False
+        
+        # Update Excel file with results
+        success = update_excel_file(date_range, data_results)
+        
+        if success:
+            write_log("SharePoint automation completed successfully", "GREEN")
+            write_log("OneDrive will automatically sync changes to SharePoint", "CYAN")
+        else:
+            write_log("SharePoint automation completed with errors", "YELLOW")
+            
+        return success
+        
+    except Exception as e:
+        if _USER_TERMINATED:
+            write_log("Process terminated by user", "YELLOW")
+            return False
+        write_log(f"Error in SharePoint automation: {str(e)}", "RED")
+        import traceback
+        write_log(traceback.format_exc(), "RED")
+        return False
+
+def run_sharepoint_automation(manual_mode=False, debug_mode=False):
+    """
+    Original SharePoint automation function - kept for backward compatibility
+    This is the original function that includes Excel initialization
     """
     global _USER_TERMINATED
     _USER_TERMINATED = False  # Reset termination flag
