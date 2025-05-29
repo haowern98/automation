@@ -2,6 +2,7 @@
 Weekly Report Tab
 
 Tab for viewing and exporting weekly reports from Excel files.
+Modified to save as TXT instead of HTML.
 """
 from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel, QDateEdit, 
                              QPushButton, QGridLayout, QGroupBox, QProgressBar,
@@ -182,15 +183,15 @@ class WeeklyReportTab(QWidget):
         group_box = QGroupBox("Export Options")
         layout = QHBoxLayout(group_box)
         
-        # Export buttons
-        self.export_html_button = QPushButton("Save as HTML")
-        self.export_html_button.clicked.connect(self._export_html)
+        # Export buttons - CHANGED: Save as TXT instead of HTML
+        self.export_txt_button = QPushButton("Save as TXT")
+        self.export_txt_button.clicked.connect(self._export_txt)
         
         self.open_browser_button = QPushButton("Open in Browser")
         self.open_browser_button.clicked.connect(self._open_in_browser)
         
         # Add buttons to layout
-        layout.addWidget(self.export_html_button)
+        layout.addWidget(self.export_txt_button)
         layout.addWidget(self.open_browser_button)
         layout.addStretch()  # Push buttons to the left
         
@@ -287,12 +288,14 @@ class WeeklyReportTab(QWidget):
                 
                 # Store the HTML for export
                 self.current_html = html_content
+                # Store the raw data for TXT export
+                self.current_data = data
                 
                 # Update status
                 self.status_label.setText(status_message)
                 
                 # Enable export buttons
-                self.export_html_button.setEnabled(True)
+                self.export_txt_button.setEnabled(True)
                 self.open_browser_button.setEnabled(True)
                 
             except Exception as e:
@@ -325,34 +328,74 @@ class WeeklyReportTab(QWidget):
         
         if not loading:
             # Reset export buttons if not loading
-            self.export_html_button.setEnabled(hasattr(self, 'current_html'))
+            self.export_txt_button.setEnabled(hasattr(self, 'current_data'))
             self.open_browser_button.setEnabled(hasattr(self, 'current_html'))
     
-    def _export_html(self):
-        """Export the current report as HTML file"""
-        if not hasattr(self, 'current_html'):
+    def _export_txt(self):
+        if not hasattr(self, 'current_data'):
             QMessageBox.information(self, "No Report", "Please generate a report first.")
             return
         
-        # Get save location
-        import os
-        default_filename = f"weekly_report_{self.current_date_range.replace(' ', '_').replace('-', '_')}.html"
-        file_path, _ = QFileDialog.getSaveFileName(
-            self, 
-            "Save Weekly Report", 
-            os.path.join(os.path.expanduser("~"), "Downloads", default_filename),
-            "HTML Files (*.html);;All Files (*)"
-        )
+        try:
+            import os  # Import the os module
+            
+            # Hardcoded path to the desired folder
+            hardcoded_folder = r"C:\Users\haowerwu\OneDrive - DPDHL\Documents\weeklyreportlog"
+            
+            # Create filename with timestamp to avoid conflicts
+            timestamp = self._get_current_timestamp().replace(":", "-").replace(" ", "_")
+            safe_date_range = self.current_date_range.replace(' ', '_').replace('-', '_')
+            filename = f"weekly_report_{safe_date_range}_{timestamp}.txt"
+            
+            # Full file path in the hardcoded folder
+            file_path = os.path.join(hardcoded_folder, filename)
+            
+            # Convert the data to plain text format
+            txt_content = self._convert_data_to_txt(self.current_data, self.current_date_range)
+            
+            # Save the TXT file directly to the hardcoded folder
+            with open(file_path, 'w', encoding='utf-8') as f:
+                f.write(txt_content)
+            
+            QMessageBox.information(self, "Export Successful", f"Report saved to:\n{file_path}")
+            
+        except Exception as e:
+            QMessageBox.critical(self, "Export Error", f"Error saving file:\n{str(e)}")
+    
+    def _convert_data_to_txt(self, data, date_range_str):
+        """
+        Convert the extracted data to HTML table format for TXT file.
         
-        if file_path:
-            try:
-                success = self.extractor.save_html_to_file(self.current_html, file_path, self.current_date_range)
-                if success:
-                    QMessageBox.information(self, "Export Successful", f"Report saved to:\n{file_path}")
-                else:
-                    QMessageBox.warning(self, "Export Failed", "Failed to save the HTML file.")
-            except Exception as e:
-                QMessageBox.critical(self, "Export Error", f"Error saving file:\n{str(e)}")
+        Args:
+            data: The extracted data (dict for combined data, list for regular data)
+            date_range_str: Date range string
+            
+        Returns:
+            str: HTML table content with all formatting preserved
+        """
+        # Get the complete HTML table from the extractor
+        if isinstance(data, dict):
+            # This is combined data - generate the combined HTML table
+            html_table = self.extractor.generate_combined_html_table(data)
+        else:
+            # This is regular MFA-only data
+            html_table = self.extractor.generate_html_table(data)
+        
+        # Add starting paragraphs
+        txt_content = []
+        txt_content.append(f'<p class="editor-paragraph"><b>{date_range_str} Weekly Report</b></p><br>')
+        txt_content.append('<p class="editor-paragraph"><b>MFA &amp; AD/EDS<br></b></p>')
+        txt_content.append("")
+        
+        # Add the complete HTML table with all styling
+        txt_content.append(html_table)
+        
+        return "\n".join(txt_content)
+    
+    def _get_current_timestamp(self):
+        """Get current timestamp as string"""
+        import datetime
+        return datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     
     def _open_in_browser(self):
         """Open the current report in the default browser"""
