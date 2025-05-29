@@ -9,6 +9,7 @@ from PyQt5.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout,
                              QCheckBox, QFileDialog, QMessageBox, QComboBox)
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QFont
+from PyQt5.QtWidgets import QTextEdit  
 
 class SettingsManager:
     """Manages application settings"""
@@ -37,7 +38,16 @@ class SettingsManager:
             },
             "general": {
                 "auto_mode_timeout": "30",
-                "show_terminal": False 
+                "show_terminal": False,
+                "section_keywords": [                    # <-- ADD THIS
+                    "Applied MFA Method",
+                    "ARP Invalid", 
+                    "Accounts with Manager",
+                    "No AD",
+                    "GID assigned",
+                    "Accounts with",
+                    "Manager/ARP"
+                ]
             }
         }
         self.settings = self.load_settings()
@@ -90,6 +100,17 @@ class SettingsManager:
         if category not in self.settings:
             self.settings[category] = {}
         self.settings[category][key] = value
+
+    def get_section_keywords(self):
+        """Get section keywords as a list"""
+        keywords = self.get('general', 'section_keywords', [])
+        if not keywords:  # Fallback to defaults if empty
+            keywords = self.default_settings['general']['section_keywords']
+            return keywords
+
+    def set_section_keywords(self, keywords_list):
+        """Set section keywords from a list"""
+        self.set('general', 'section_keywords', keywords_list)
 
 class SettingsDialog(QDialog):
     """Enhanced Settings dialog for SharePoint Automation"""
@@ -144,53 +165,135 @@ class SettingsDialog(QDialog):
         # Load current settings into the dialog
         self.load_current_settings()
     
-    def _create_general_tab(self):
-        """Create the general settings tab"""
-        tab = QWidget()
-        layout = QVBoxLayout(tab)
-        layout.setContentsMargins(20, 20, 20, 20)
-        
-        # Create a heading
-        heading = QLabel("General Settings")
-        heading_font = QFont("Segoe UI", 12)
-        heading_font.setBold(True)
-        heading.setFont(heading_font)
-        
-        # Create a description
-        description = QLabel("Configure general application settings")
-        description.setWordWrap(True)
-        
-        # Create timeout settings group
-        timeout_group = QGroupBox("Auto Mode Timeout")
-        timeout_layout = QGridLayout(timeout_group)
-        
-        # Add timeout dropdown
-        timeout_layout.addWidget(QLabel("Auto mode timeout:"), 0, 0)
-        self.timeout_dropdown = QComboBox()
-        self.timeout_dropdown.addItems(["10 seconds", "20 seconds", "30 seconds", "45 seconds", "60 seconds", "90 seconds", "120 seconds"])
-        
-        # Set default selection to 30 seconds (index 2)
-        self.timeout_dropdown.setCurrentIndex(2)
-        
-        timeout_layout.addWidget(self.timeout_dropdown, 0, 1)
-        
-        # Add help text
-        timeout_help = QLabel("Time before the date selection dialog automatically uses auto date in auto mode")
-        timeout_help.setStyleSheet("color: gray; font-size: 10px;")
-        timeout_layout.addWidget(timeout_help, 1, 0, 1, 2)
-        
-        # Add widgets to layout
-        layout.addWidget(heading)
-        layout.addWidget(description)
-        layout.addSpacing(20)
-        layout.addWidget(timeout_group)
-        layout.addStretch(1)
-        
-        # Load timeout setting
-        self.load_timeout_setting()
-        
-        return tab
+def _create_general_tab(self):
+    """Create the general settings tab"""
+    tab = QWidget()
+    layout = QVBoxLayout(tab)
+    layout.setContentsMargins(20, 20, 20, 20)
     
+    # Create a heading
+    heading = QLabel("General Settings")
+    heading_font = QFont("Segoe UI", 12)
+    heading_font.setBold(True)
+    heading.setFont(heading_font)
+    
+    # Create a description
+    description = QLabel("Configure general application settings")
+    description.setWordWrap(True)
+    
+    # Create timeout settings group
+    timeout_group = QGroupBox("Auto Mode Timeout")
+    timeout_layout = QGridLayout(timeout_group)
+    
+    # Add timeout dropdown
+    timeout_layout.addWidget(QLabel("Auto mode timeout:"), 0, 0)
+    self.timeout_dropdown = QComboBox()
+    self.timeout_dropdown.addItems(["10 seconds", "20 seconds", "30 seconds", "45 seconds", "60 seconds", "90 seconds", "120 seconds"])
+    
+    # Set default selection to 30 seconds (index 2)
+    self.timeout_dropdown.setCurrentIndex(2)
+    
+    timeout_layout.addWidget(self.timeout_dropdown, 0, 1)
+    
+    # Add help text
+    timeout_help = QLabel("Time before the date selection dialog automatically uses auto date in auto mode")
+    timeout_help.setStyleSheet("color: gray; font-size: 10px;")
+    timeout_layout.addWidget(timeout_help, 1, 0, 1, 2)
+    
+    # ===== NEW SECTION: Section Keywords =====
+    # Create section keywords group
+    keywords_group = QGroupBox("Section Keywords")
+    keywords_layout = QGridLayout(keywords_group)
+    
+    # Add section keywords text area
+    keywords_layout.addWidget(QLabel("MFA Section Headers:"), 0, 0)
+    self.section_keywords_edit = QTextEdit()
+    self.section_keywords_edit.setMaximumHeight(120)  # Limit height
+    self.section_keywords_edit.setPlaceholderText("Enter keywords that identify section headers (one per line)")
+    keywords_layout.addWidget(self.section_keywords_edit, 0, 1)
+    
+    # Add help text for keywords
+    keywords_help = QLabel("Keywords that identify section headers (blue rows) in MFA reports. One keyword per line.")
+    keywords_help.setStyleSheet("color: gray; font-size: 10px;")
+    keywords_help.setWordWrap(True)
+    keywords_layout.addWidget(keywords_help, 1, 0, 1, 2)
+    
+    # Add reset keywords button
+    reset_keywords_button = QPushButton("Reset to Defaults")
+    reset_keywords_button.setMaximumWidth(120)
+    reset_keywords_button.clicked.connect(self.reset_section_keywords)
+    keywords_layout.addWidget(reset_keywords_button, 2, 1, alignment=Qt.AlignRight)
+    # ===== END NEW SECTION =====
+    
+    # Add widgets to layout
+    layout.addWidget(heading)
+    layout.addWidget(description)
+    layout.addSpacing(20)
+    layout.addWidget(timeout_group)
+    layout.addSpacing(10)  # Add spacing between groups
+    layout.addWidget(keywords_group)  # Add the new keywords group
+    layout.addStretch(1)
+    
+    # Load timeout setting
+    self.load_timeout_setting()
+    # Load section keywords
+    self.load_section_keywords()  # New method to load keywords
+    
+    return tab
+
+# ===== ADD THESE NEW METHODS TO THE SettingsDialog CLASS =====
+
+def load_section_keywords(self):
+    """Load section keywords from settings into the text area"""
+    keywords = self.settings_manager.get_section_keywords()
+    # Join keywords with newlines for display in text area
+    keywords_text = '\n'.join(keywords)
+    self.section_keywords_edit.setPlainText(keywords_text)
+
+def reset_section_keywords(self):
+    """Reset section keywords to defaults"""
+    default_keywords = self.settings_manager.default_settings['general']['section_keywords']
+    keywords_text = '\n'.join(default_keywords)
+    self.section_keywords_edit.setPlainText(keywords_text)
+
+    def get_section_keywords_from_ui(self):
+        """Get section keywords from the UI text area as a list"""
+        text = self.section_keywords_edit.toPlainText().strip()
+        if not text:
+            return []
+        
+        # Split by lines and clean up
+        keywords = []
+        for line in text.split('\n'):
+            keyword = line.strip()
+            if keyword:  # Only add non-empty lines
+                keywords.append(keyword)
+        
+        return keywords
+
+    # ===== UPDATE THE save_settings METHOD =====
+    # Add this section to the existing save_settings method, after the timeout saving:
+
+    # Save section keywords (ADD THIS SECTION)
+    try:
+        section_keywords = self.get_section_keywords_from_ui()
+        if not section_keywords:
+            QMessageBox.warning(self, "Invalid Keywords", 
+                            "Section keywords cannot be empty. Please add at least one keyword.")
+            return
+        
+        self.settings_manager.set_section_keywords(section_keywords)
+    except Exception as e:
+        QMessageBox.warning(self, "Keywords Error", 
+                        f"Error processing section keywords:\n{str(e)}")
+        return
+
+    # ===== UPDATE THE reset_to_defaults METHOD =====
+    # Add this line to the existing reset_to_defaults method:
+
+    # Reset section keywords to defaults (ADD THIS LINE)
+    self.reset_section_keywords()
+
     def _create_file_paths_tab(self):
         """Create the file paths settings tab"""
         tab = QWidget()
