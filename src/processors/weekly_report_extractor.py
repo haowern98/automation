@@ -66,6 +66,35 @@ class WeeklyReportExtractor:
             'Weekly Report 2025 - Copy.xlsx'
         )
     
+    def get_section_keywords(self):
+        """
+        Get section keywords from settings, with fallback to hardcoded defaults
+        
+        Returns:
+            list: List of section keywords
+        """
+        try:
+            from src.gui.settings_dialog import get_settings
+            settings = get_settings()
+            keywords = settings.get_section_keywords()
+            
+            # Validate that we have keywords
+            if keywords and len(keywords) > 0:
+                return keywords
+            else:
+                # Fallback to hardcoded defaults if settings are empty
+                return [
+                    "Applied MFA Method", "ARP Invalid", "Accounts with Manager", 
+                    "No AD", "GID assigned", "Accounts with", "Manager/ARP"
+                ]
+        except Exception as e:
+            # If settings loading fails, use hardcoded defaults
+            print(f"Warning: Could not load section keywords from settings: {e}")
+            return [
+                "Applied MFA Method", "ARP Invalid", "Accounts with Manager", 
+                "No AD", "GID assigned", "Accounts with", "Manager/ARP"
+            ]
+    
     def set_excel_file_path(self, excel_file_path):
         """
         Set the path to the Excel file
@@ -564,8 +593,7 @@ class WeeklyReportExtractor:
             is_section_header = False
             if row_idx > 1 and len(row) > 0 and row[0]['value']:
                 first_cell = row[0]['value']
-                section_keywords = ["Applied MFA Method", "ARP Invalid", "Accounts with Manager", 
-                                "No AD", "GID assigned", "Accounts with", "Manager/ARP"]
+                section_keywords = self.get_section_keywords()
                 if any(keyword in first_cell for keyword in section_keywords):
                     is_section_header = True
             
@@ -815,7 +843,7 @@ class WeeklyReportExtractor:
                             html += f'<td style="background-color: #FFFFFF; color: #FF0000; font-weight: bold;"><span style="font-size: 7px;"><b>{header}</b></span></td>\n'
                 
                 # Handle section headers
-                elif len(row) > 0 and any(keyword in row[0].get('value', '') for keyword in ["Applied MFA Method", "ARP Invalid", "Accounts with Manager", "No AD", "GID assigned", "Accounts with", "Manager/ARP"]):
+                elif len(row) > 0 and any(keyword in row[0].get('value', '') for keyword in self.get_section_keywords()):
                     section_value = row[0]['value']
                     html += f'<td style="background-color: #DDEBF7; color: #000000; font-weight: bold;"><span style="font-size: 7px;"><b>{section_value}</b></span></td>\n'
                     html += f'<td style="background-color: #DDEBF7; color: #000000; font-weight: bold;"><span style="font-size: 7px;"><b></b></span></td>\n'

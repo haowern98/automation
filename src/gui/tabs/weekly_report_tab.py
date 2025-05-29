@@ -339,29 +339,68 @@ class WeeklyReportTab(QWidget):
         try:
             import os  # Import the os module
             
-            # Hardcoded path to the desired folder
-            hardcoded_folder = r"C:\Users\haowerwu\OneDrive - DPDHL\Documents\weeklyreportlog"
+            # Get output directory from settings
+            from src.gui.settings_dialog import get_settings
+            settings = get_settings()
+            configured_folder = settings.get('file_paths', 'output_directory', '')
+            
+            print(f"DEBUG: Configured folder from settings: '{configured_folder}'")  # Debug line
+            
+            # Use configured folder, or fallback to hardcoded path if not set
+            if configured_folder and configured_folder.strip():
+                output_folder = configured_folder
+                print(f"DEBUG: Using configured folder: '{output_folder}'")  # Debug line
+                
+                # Create the directory if it doesn't exist
+                if not os.path.exists(output_folder):
+                    try:
+                        os.makedirs(output_folder, exist_ok=True)
+                        print(f"DEBUG: Created directory: '{output_folder}'")  # Debug line
+                    except Exception as e:
+                        print(f"DEBUG: Failed to create directory: {str(e)}")  # Debug line
+                        QMessageBox.critical(self, "Directory Error", 
+                                        f"Could not create output directory:\n{str(e)}\n\nPlease configure the output directory in Settings.")
+                        return
+            else:
+                # Fallback to hardcoded path
+                output_folder = r"C:\Users\haowerwu\OneDrive - DPDHL\Documents\weeklyreportlog"
+                print(f"DEBUG: Using fallback folder: '{output_folder}'")  # Debug line
+                
+                # Create the directory if it doesn't exist
+                if not os.path.exists(output_folder):
+                    try:
+                        os.makedirs(output_folder, exist_ok=True)
+                        print(f"DEBUG: Created fallback directory: '{output_folder}'")  # Debug line
+                    except Exception as e:
+                        print(f"DEBUG: Failed to create fallback directory: {str(e)}")  # Debug line
+                        QMessageBox.critical(self, "Directory Error", 
+                                        f"Could not create output directory:\n{str(e)}\n\nPlease configure the output directory in Settings.")
+                        return
+            
+            print(f"DEBUG: Final output folder: '{output_folder}'")  # Debug line
             
             # Create filename with timestamp to avoid conflicts
             timestamp = self._get_current_timestamp().replace(":", "-").replace(" ", "_")
             safe_date_range = self.current_date_range.replace(' ', '_').replace('-', '_')
             filename = f"weekly_report_{safe_date_range}_{timestamp}.txt"
             
-            # Full file path in the hardcoded folder
-            file_path = os.path.join(hardcoded_folder, filename)
+            # Full file path in the configured folder
+            file_path = os.path.join(output_folder, filename)
+            print(f"DEBUG: Full file path: '{file_path}'")  # Debug line
             
             # Convert the data to plain text format
             txt_content = self._convert_data_to_txt(self.current_data, self.current_date_range)
             
-            # Save the TXT file directly to the hardcoded folder
+            # Save the TXT file directly to the configured folder
             with open(file_path, 'w', encoding='utf-8') as f:
                 f.write(txt_content)
             
+            print(f"DEBUG: File saved successfully to: '{file_path}'")  # Debug line
             QMessageBox.information(self, "Export Successful", f"Report saved to:\n{file_path}")
             
         except Exception as e:
+            print(f"DEBUG: Exception occurred: {str(e)}")  # Debug line
             QMessageBox.critical(self, "Export Error", f"Error saving file:\n{str(e)}")
-    
     def _convert_data_to_txt(self, data, date_range_str):
         """
         Convert the extracted data to HTML table format for TXT file.

@@ -82,10 +82,11 @@ class SettingsTab(QWidget):
         
         # Add terminal visibility checkbox
         self.show_terminal_checkbox = QCheckBox("Show terminal window")
+        self.show_terminal_checkbox.stateChanged.connect(self.on_terminal_checkbox_changed)  # Connect to immediate handler
         debug_layout.addWidget(self.show_terminal_checkbox, 0, 0)
         
         # Add help text
-        terminal_help = QLabel("Show command terminal for debugging (requires restart)")
+        terminal_help = QLabel("Show/hide command terminal for debugging (applies immediately)")
         terminal_help.setStyleSheet("color: gray; font-size: 10px;")
         debug_layout.addWidget(terminal_help, 1, 0)
         
@@ -110,6 +111,29 @@ class SettingsTab(QWidget):
         self.load_debug_settings()
         
         return tab
+    
+    def on_terminal_checkbox_changed(self, state):
+        """Handle terminal checkbox change immediately"""
+        try:
+            from src.utils.terminal_control import show_terminal, hide_terminal
+            
+            if state == Qt.Checked:
+                # Show terminal immediately
+                success = show_terminal()
+                if success:
+                    print("Terminal shown successfully")
+                else:
+                    print("Could not show terminal")
+            else:
+                # Hide terminal immediately
+                success = hide_terminal()
+                if success:
+                    print("Terminal hidden successfully")
+                else:
+                    print("Could not hide terminal")
+                    
+        except Exception as e:
+            print(f"Error applying terminal visibility: {str(e)}")
     
     def _create_file_paths_tab(self):
         """Create the file paths settings tab"""
@@ -206,6 +230,30 @@ class SettingsTab(QWidget):
         weekly_layout.addWidget(weekly_info, 1, 1, 1, 2)
         
         layout.addWidget(weekly_group)
+
+        # Create Output Directory Settings Group
+        output_group = QGroupBox("Output Directory Settings")
+        output_layout = QGridLayout(output_group)
+        
+        # Output Directory Path
+        output_layout.addWidget(QLabel("TXT Output Directory:"), 0, 0)
+        self.output_directory_edit = QLineEdit()
+        self.output_directory_edit.setPlaceholderText("Enter path to directory for saving TXT files")
+        output_layout.addWidget(self.output_directory_edit, 0, 1)
+        
+        self.output_browse_button = QPushButton("Browse...")
+        self.output_browse_button.clicked.connect(self.browse_output_directory)
+        output_layout.addWidget(self.output_browse_button, 0, 2)
+        
+        # Add info label
+        output_info = QLabel("Directory where generated TXT files will be saved")
+        output_info.setStyleSheet("color: gray; font-size: 10px;")
+        output_layout.addWidget(output_info, 1, 1, 1, 2)
+        
+        layout.addWidget(output_group)
+        
+        # Add save button
+        save_button = QPushButton("Save Settings")
         
         # Add save button
         save_button = QPushButton("Save Settings")
@@ -249,6 +297,20 @@ class SettingsTab(QWidget):
         if directory:
             self.er_directory_edit.setText(directory)
     
+    def browse_output_directory(self):
+        """Browse for output directory"""
+        import os
+        
+        current_path = self.output_directory_edit.text()
+        if not current_path:
+            current_path = os.environ.get('USERPROFILE', '')
+        
+        directory = QFileDialog.getExistingDirectory(
+            self, "Select Output Directory", current_path)
+        
+        if directory:
+            self.output_directory_edit.setText(directory)
+
     def browse_weekly_report_file(self):
         """Browse for Weekly Report file"""
         import os
@@ -300,81 +362,113 @@ class SettingsTab(QWidget):
         # Load terminal visibility setting
         show_terminal = self.settings_manager.get('general', 'show_terminal', False)
         self.show_terminal_checkbox.setChecked(show_terminal)
-    
+        
     def save_settings(self):
-        """Save all settings"""
-        try:
-            # Get values from UI controls
-            gsn_dir = self.gsn_directory_edit.text().strip()
-            er_dir = self.er_directory_edit.text().strip()
-            gsn_pattern = self.gsn_pattern_edit.text().strip()
-            er_pattern = self.er_pattern_edit.text().strip()
-            weekly_path = self.weekly_report_path_edit.text().strip()
-            
-            # Validate inputs
-            import os
-            if gsn_dir and not os.path.exists(gsn_dir):
-                QMessageBox.warning(self, "Invalid Directory", 
-                                f"GSN search directory does not exist:\n{gsn_dir}")
-                return
-            
-            if er_dir and not os.path.exists(er_dir):
-                QMessageBox.warning(self, "Invalid Directory", 
-                                f"ER search directory does not exist:\n{er_dir}")
-                return
-            
-            if weekly_path and not os.path.exists(weekly_path):
-                QMessageBox.warning(self, "Invalid File Path", 
-                                f"Weekly Report file does not exist:\n{weekly_path}")
-                return
-            
-            # Check if patterns are not empty
-            if not gsn_pattern:
-                QMessageBox.warning(self, "Invalid Pattern", 
-                                "GSN file pattern cannot be empty")
-                return
-            
-            if not er_pattern:
-                QMessageBox.warning(self, "Invalid Pattern", 
-                                "ER file pattern cannot be empty")
-                return
-            
-            # Save timeout setting
-            timeout_text = self.timeout_dropdown.currentText()
-            timeout_value = timeout_text.split()[0]  # Extract just the number
-            self.settings_manager.set('general', 'auto_mode_timeout', timeout_value)
-            
-            # Save terminal visibility setting if the checkbox exists
-            if hasattr(self, 'show_terminal_checkbox'):
-                show_terminal = self.show_terminal_checkbox.isChecked()
-                self.settings_manager.set('general', 'show_terminal', show_terminal)
-            
-            # Save file path settings
-            self.settings_manager.set('file_paths', 'gsn_search_directory', gsn_dir)
-            self.settings_manager.set('file_paths', 'er_search_directory', er_dir)
-            self.settings_manager.set('file_paths', 'gsn_file_pattern', gsn_pattern)
-            self.settings_manager.set('file_paths', 'er_file_pattern', er_pattern)
-            self.settings_manager.set('file_paths', 'weekly_report_file_path', weekly_path)
-            
-            # Save settings to file
-            if self.settings_manager.save_settings():
-                # Show notification about terminal visibility if it changed
+            """Save all settings with debug output"""
+            try:
+                # Get values from UI controls
+                gsn_dir = self.gsn_directory_edit.text().strip()
+                er_dir = self.er_directory_edit.text().strip()
+                gsn_pattern = self.gsn_pattern_edit.text().strip()
+                er_pattern = self.er_pattern_edit.text().strip()
+                weekly_path = self.weekly_report_path_edit.text().strip()
+                output_dir = self.output_directory_edit.text().strip()
+                
+                # DEBUG: Print what we're trying to save
+                print(f"DEBUG SAVE: gsn_dir = '{gsn_dir}'")
+                print(f"DEBUG SAVE: er_dir = '{er_dir}'")
+                print(f"DEBUG SAVE: gsn_pattern = '{gsn_pattern}'")
+                print(f"DEBUG SAVE: er_pattern = '{er_pattern}'")
+                print(f"DEBUG SAVE: weekly_path = '{weekly_path}'")
+                print(f"DEBUG SAVE: output_dir = '{output_dir}'")
+                
+                # Validate inputs
+                import os
+                if gsn_dir and not os.path.exists(gsn_dir):
+                    print(f"DEBUG SAVE: GSN directory doesn't exist: '{gsn_dir}'")
+                    QMessageBox.warning(self, "Invalid Directory", 
+                                    f"GSN search directory does not exist:\n{gsn_dir}")
+                    return
+                
+                if er_dir and not os.path.exists(er_dir):
+                    print(f"DEBUG SAVE: ER directory doesn't exist: '{er_dir}'")
+                    QMessageBox.warning(self, "Invalid Directory", 
+                                    f"ER search directory does not exist:\n{er_dir}")
+                    return
+                
+                if weekly_path and not os.path.exists(weekly_path):
+                    print(f"DEBUG SAVE: Weekly report file doesn't exist: '{weekly_path}'")
+                    QMessageBox.warning(self, "Invalid File Path", 
+                                    f"Weekly Report file does not exist:\n{weekly_path}")
+                    return
+                
+                if output_dir and not os.path.exists(output_dir):
+                    print(f"DEBUG SAVE: Output directory doesn't exist: '{output_dir}' - will create it")
+                    # Don't return here, let it create the directory
+                
+                # Check if patterns are not empty
+                if not gsn_pattern:
+                    print("DEBUG SAVE: GSN pattern is empty")
+                    QMessageBox.warning(self, "Invalid Pattern", 
+                                    "GSN file pattern cannot be empty")
+                    return
+                
+                if not er_pattern:
+                    print("DEBUG SAVE: ER pattern is empty")
+                    QMessageBox.warning(self, "Invalid Pattern", 
+                                    "ER file pattern cannot be empty")
+                    return
+                
+                print("DEBUG SAVE: All validations passed, saving settings...")
+                
+                # Save timeout setting
+                timeout_text = self.timeout_dropdown.currentText()
+                timeout_value = timeout_text.split()[0]  # Extract just the number
+                print(f"DEBUG SAVE: Setting timeout to '{timeout_value}'")
+                self.settings_manager.set('general', 'auto_mode_timeout', timeout_value)
+                
+                # Save terminal visibility setting if the checkbox exists
                 if hasattr(self, 'show_terminal_checkbox'):
                     show_terminal = self.show_terminal_checkbox.isChecked()
-                    # Check if setting exists and has changed
-                    if self.settings_manager.get('general', 'show_terminal', False) != show_terminal:
-                        QMessageBox.information(self, "Settings Saved",
-                                            "Settings have been saved successfully!\n\n"
-                                            "Note: The terminal visibility setting has changed.\n"
-                                            "Please restart the application for this change to take effect.")
-                        return
-                        
-                # Standard success message
-                QMessageBox.information(self, "Settings Saved", 
-                                    "Settings have been saved successfully!")
-            else:
-                QMessageBox.critical(self, "Save Error", 
-                                    "Failed to save settings to file!")
-        
-        except Exception as e:
-            QMessageBox.critical(self, "Error", f"An error occurred while saving settings:\n{str(e)}")
+                    print(f"DEBUG SAVE: Setting show_terminal to '{show_terminal}'")
+                    self.settings_manager.set('general', 'show_terminal', show_terminal)
+                
+                # Save file path settings
+                print("DEBUG SAVE: Setting file path settings...")
+                self.settings_manager.set('file_paths', 'gsn_search_directory', gsn_dir)
+                self.settings_manager.set('file_paths', 'er_search_directory', er_dir)
+                self.settings_manager.set('file_paths', 'gsn_file_pattern', gsn_pattern)
+                self.settings_manager.set('file_paths', 'er_file_pattern', er_pattern)
+                self.settings_manager.set('file_paths', 'weekly_report_file_path', weekly_path)
+                self.settings_manager.set('file_paths', 'output_directory', output_dir)
+                
+                print(f"DEBUG SAVE: About to save settings to file...")
+                
+                # Save settings to file
+                if self.settings_manager.save_settings():
+                    print("DEBUG SAVE: Settings saved successfully to file!")
+                    
+                    # Show notification about terminal visibility if it changed
+                    if hasattr(self, 'show_terminal_checkbox'):
+                        show_terminal = self.show_terminal_checkbox.isChecked()
+                        # Check if setting exists and has changed
+                        if self.settings_manager.get('general', 'show_terminal', False) != show_terminal:
+                            QMessageBox.information(self, "Settings Saved",
+                                                "Settings have been saved successfully!\n\n"
+                                                "Note: The terminal visibility setting has changed.\n"
+                                                "Please restart the application for this change to take effect.")
+                            return
+                            
+                    # Standard success message
+                    QMessageBox.information(self, "Settings Saved", 
+                                        "Settings have been saved successfully!")
+                else:
+                    print("DEBUG SAVE: Failed to save settings to file!")
+                    QMessageBox.critical(self, "Save Error", 
+                                        "Failed to save settings to file!")
+            
+            except Exception as e:
+                print(f"DEBUG SAVE: Exception occurred: {str(e)}")
+                import traceback
+                traceback.print_exc()
+                QMessageBox.critical(self, "Error", f"An error occurred while saving settings:\n{str(e)}")

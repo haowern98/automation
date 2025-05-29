@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Enhanced Build script to create EXE file for SharePoint Automation Manual Mode
-Keeps automated mode as batch file for task scheduler
+Enhanced Build script to create SINGLE EXE file for SharePoint Automation
+Supports both manual and automatic modes with smart detection
 """
 import os
 import sys
@@ -33,7 +33,8 @@ def check_files():
         "src/config.py", 
         "src/utils/app_controller.py",
         "src/gui/tabbed_app.py",
-        "ADProcessor.txt"
+        "ADProcessor.txt",
+        "single_launcher.py"  # New requirement
     ]
     
     missing_files = []
@@ -68,7 +69,13 @@ def create_default_settings():
             "gsn_search_directory": downloads_path,
             "er_search_directory": downloads_path,
             "gsn_file_pattern": "alm_hardware",
-            "er_file_pattern": "data"
+            "er_file_pattern": "data",
+            "weekly_report_file_path": os.path.join(
+                user_profile,
+                'DPDHL',
+                'SM Team - SG - AD EDS, MFA, GSN VS AD, GSN VS ER Weekly Report',
+                'Weekly Report 2025.xlsx'
+            )
         },
         "general": {
             "auto_mode_timeout": "30",
@@ -114,11 +121,11 @@ StringFileInfo(
   StringTable(
     u'040904B0',
     [StringStruct(u'CompanyName', u'Your Company'),
-    StringStruct(u'FileDescription', u'SharePoint Automation Tool - Manual Mode'),
+    StringStruct(u'FileDescription', u'SharePoint Automation Tool - Universal Mode'),
     StringStruct(u'FileVersion', u'1.0.0'),
     StringStruct(u'InternalName', u'SharePointAutomation'),
     StringStruct(u'LegalCopyright', u'Copyright (C) 2025'),
-    StringStruct(u'OriginalFilename', u'SharePointAutomation-Manual.exe'),
+    StringStruct(u'OriginalFilename', u'SharePointAutomation.exe'),
     StringStruct(u'ProductName', u'SharePoint Automation'),
     StringStruct(u'ProductVersion', u'1.0.0')])
   ]), 
@@ -131,16 +138,16 @@ VarFileInfo([VarStruct(u'Translation', [1033, 1200])])
     
     print("✓ Created version_info.txt")
 
-def build_manual_exe():
-    """Build the manual mode EXE"""
-    print("🔨 Building SharePoint Automation (Manual Mode) EXE...")
+def build_single_exe():
+    """Build the single universal EXE"""
+    print("🔨 Building SharePoint Automation (Universal Mode) EXE...")
     
-    # PyInstaller command for manual mode
+    # PyInstaller command for single universal EXE
     cmd = [
         "pyinstaller",
         "--onefile",  # Single executable file
-        "--windowed",  # No console window (GUI only)
-        "--name", "SharePointAutomation-Manual",
+        "--windowed",  # No console window by default (smart detection will handle this)
+        "--name", "SharePointAutomation",  # Simple name
         "--add-data", "settings.json;.",  # Include settings file
         "--add-data", "data;data",  # Include data directory
         "--add-data", "ADProcessor.txt;.",  # Include AD processor
@@ -178,11 +185,16 @@ def build_manual_exe():
         "--hidden-import", "src.processors.er_processor", 
         "--hidden-import", "src.processors.er_processor_alt",
         "--hidden-import", "src.processors.ad_processor",
+        "--hidden-import", "src.processors.weekly_report_extractor",
+        "--hidden-import", "src.processors.gsn_vs_ad_extractor",
+        "--hidden-import", "src.processors.gsn_vs_er_extractor",
+        "--hidden-import", "src.processors.er_extractor",
         "--hidden-import", "src.utils",
         "--hidden-import", "src.utils.logger",
         "--hidden-import", "src.utils.excel_functions",
         "--hidden-import", "src.utils.comparison",
         "--hidden-import", "src.utils.app_controller",
+        "--hidden-import", "src.gui.loading_screen",
         # Exclude unnecessary modules to reduce size
         "--exclude-module", "tkinter",
         "--exclude-module", "matplotlib", 
@@ -191,8 +203,8 @@ def build_manual_exe():
         "--exclude-module", "notebook",
         "--exclude-module", "scipy",
         "--exclude-module", "numpy.testing",
-        # Entry point with manual mode argument
-        "manual_launcher.py"
+        # Entry point - the single launcher
+        "single_launcher.py"
     ]
     
     # Add icon if it exists
@@ -202,44 +214,14 @@ def build_manual_exe():
     
     try:
         subprocess.check_call(cmd)
-        print("✓ Manual mode EXE built successfully!")
+        print("✓ Universal EXE built successfully!")
         return True
     except subprocess.CalledProcessError as e:
-        print(f"❌ Failed to build manual EXE: {e}")
+        print(f"❌ Failed to build universal EXE: {e}")
         return False
 
-def create_manual_launcher():
-    """Create a launcher script specifically for manual mode"""
-    launcher_content = '''#!/usr/bin/env python3
-"""
-Manual Mode Launcher for SharePoint Automation
-This launcher ensures the application starts in manual mode
-"""
-import sys
-import os
-
-# Add current directory to path so we can import src modules
-current_dir = os.path.dirname(os.path.abspath(__file__))
-if current_dir not in sys.path:
-    sys.path.insert(0, current_dir)
-
-# Import and run the main application in manual mode
-if __name__ == "__main__":
-    # Force manual mode by setting sys.argv
-    sys.argv = [sys.argv[0], "--manual"]
-    
-    # Import and run main
-    from src.main import main
-    main()
-'''
-    
-    with open("manual_launcher.py", "w") as f:
-        f.write(launcher_content)
-    
-    print("✓ Created manual_launcher.py")
-
 def create_distribution_package():
-    """Create a distribution package with both manual EXE and auto batch files"""
+    """Create a distribution package with the single EXE and batch files"""
     dist_dir = "SharePoint_Automation_Distribution"
     
     # Remove existing distribution directory
@@ -249,13 +231,13 @@ def create_distribution_package():
     # Create distribution directory
     os.makedirs(dist_dir, exist_ok=True)
     
-    # Copy the manual EXE
-    if os.path.exists("dist/SharePointAutomation-Manual.exe"):
-        shutil.copy2("dist/SharePointAutomation-Manual.exe", 
-                    os.path.join(dist_dir, "SharePointAutomation-Manual.exe"))
-        print(f"✓ Copied manual EXE to {dist_dir}")
+    # Copy the universal EXE
+    if os.path.exists("dist/SharePointAutomation.exe"):
+        shutil.copy2("dist/SharePointAutomation.exe", 
+                    os.path.join(dist_dir, "SharePointAutomation.exe"))
+        print(f"✓ Copied universal EXE to {dist_dir}")
     
-    # Copy batch files for automated mode
+    # Copy batch files for automated mode (still useful for task scheduler)
     batch_files = [
         "run_setup_script.bat",
         "run_sharepoint_automation.bat", 
@@ -283,12 +265,12 @@ def create_distribution_package():
         shutil.copytree("data", os.path.join(dist_dir, "data"))
         print(f"✓ Copied data directory to {dist_dir}")
     
-    # Copy source code for batch file usage
+    # Copy source code for batch file usage (fallback)
     if os.path.exists("src"):
         shutil.copytree("src", os.path.join(dist_dir, "src"))
         print(f"✓ Copied src directory to {dist_dir}")
     
-    # Copy setup.py and requirements if they exist
+    # Copy setup.py if it exists
     if os.path.exists("setup.py"):
         shutil.copy2("setup.py", os.path.join(dist_dir, "setup.py"))
         print(f"✓ Copied setup.py to {dist_dir}")
@@ -302,73 +284,109 @@ def create_distribution_readme(dist_dir):
     """Create a README file for the distribution"""
     readme_content = """# SharePoint Automation Distribution Package
 
-This package contains both manual and automated modes for SharePoint Automation.
+This package contains the **Universal SharePoint Automation EXE** that automatically detects how to run.
 
 ## Files Included
 
-### Manual Mode (GUI)
-- **SharePointAutomation-Manual.exe** - Double-click to run in manual mode with GUI
+### Universal EXE (Recommended)
+- **SharePointAutomation.exe** - Universal EXE that automatically detects execution mode:
+  - **Double-click**: Runs in manual mode with GUI
+  - **Task Scheduler**: Runs in auto mode without GUI
+  - **Command line**: Supports `--manual` and `--auto` flags
 
-### Automated Mode (Task Scheduler)
-- **run_setup_script.bat** - Run this first to set up Python environment
-- **run_sharepoint_automation.bat** - Use this in Task Scheduler for automated runs
-- **run_ad_processor.bat** - Helper script for Active Directory processing
-- **src/** - Source code directory (required for batch file execution)
+### Legacy Batch Files (Optional)
+- **run_setup_script.bat** - Set up Python environment (only needed for batch mode)
+- **run_sharepoint_automation.bat** - Legacy batch execution
+- **run_ad_processor.bat** - Helper script for AD operations
+- **src/** - Source code directory (for batch file usage)
 
 ### Configuration & Data
 - **settings.json** - Configuration file (automatically created/updated)
 - **data/** - Data storage directory
 - **ADProcessor.txt** - PowerShell script for AD operations
 
-## Setup Instructions
+## Usage Instructions
 
-### For Manual Mode:
-1. Simply double-click `SharePointAutomation-Manual.exe`
-2. No additional setup required - all dependencies are included
+### Method 1: Universal EXE (Recommended)
 
-### For Automated Mode (Task Scheduler):
-1. First run `run_setup_script.bat` to set up Python environment
-2. Configure Task Scheduler to run `run_sharepoint_automation.bat`
-3. Ensure the task runs from this directory
+**For Manual Use:**
+1. Double-click `SharePointAutomation.exe`
+2. GUI will appear with date selection and settings
+3. No additional setup required
 
-## Task Scheduler Configuration
+**For Task Scheduler:**
+1. Create scheduled task
+2. Set program: `SharePointAutomation.exe`
+3. Set arguments: `--auto` (optional, will auto-detect)
+4. Set working directory to this folder
+5. EXE will run automatically without GUI
+
+**For Command Line:**
+```cmd
+SharePointAutomation.exe                    # Auto-detects mode
+SharePointAutomation.exe --manual           # Force manual mode
+SharePointAutomation.exe --auto             # Force auto mode
+SharePointAutomation.exe --debug            # Enable debug logging
+```
+
+### Method 2: Legacy Batch Files
+
+If you prefer the old method:
+1. Run `run_setup_script.bat` first to set up Python
+2. Use `run_sharepoint_automation.bat` for Task Scheduler
+
+## Smart Mode Detection
+
+The EXE automatically detects:
+- **Manual Mode**: Double-click, GUI environment, interactive use
+- **Auto Mode**: Task Scheduler, command line, service execution, CI/CD
+
+## Task Scheduler Setup
 
 1. Open Task Scheduler
 2. Create Basic Task
 3. Set trigger (e.g., weekly on Friday)
 4. Action: Start a program
-5. Program: `run_sharepoint_automation.bat`
-6. Start in: Path to this directory
+5. Program: `SharePointAutomation.exe`
+6. Arguments: `--auto` (optional)
+7. Start in: Path to this directory
 
 ## Settings Configuration
 
-Both modes use the same `settings.json` file for configuration:
+Use manual mode (double-click EXE) to easily configure:
 - File search directories
 - File name patterns  
 - Auto mode timeout
 - Other preferences
 
-Use the manual mode to easily configure settings through the GUI.
+Settings are saved in `settings.json` and used by both modes.
 
 ## Troubleshooting
 
-### Manual Mode:
-- If EXE doesn't start, check antivirus software
-- Settings are stored in the same directory as the EXE
+### Universal EXE Issues:
+- If mode detection fails, use explicit flags: `--manual` or `--auto`
+- Check antivirus software if EXE doesn't start
+- Ensure all files are in the same directory
 
-### Automated Mode:
-- Ensure Python virtual environment is set up (run setup script)
-- Check that all source files are present
-- Verify Task Scheduler is running from correct directory
+### Task Scheduler Issues:
+- Verify working directory is set correctly
 - Check Windows Event Viewer for error logs
+- Ensure network access for SharePoint sync
+- Verify Excel and PowerShell are available
+
+### Mode Detection Issues:
+- Use `--debug` flag to see detection reasoning
+- Check console output for detection details
+- Use explicit `--manual` or `--auto` flags to override
 
 ## Support
 
-For issues or questions, check the application logs and ensure:
-1. All required files are present
-2. Settings are properly configured
-3. Network access is available for SharePoint sync
-4. Excel and PowerShell are available on the system
+The Universal EXE provides the best experience:
+- ✅ No Python setup required
+- ✅ Automatic mode detection
+- ✅ Works for both manual and scheduled use
+- ✅ Single file distribution
+- ✅ Backward compatible with all existing functionality
 """
     
     readme_path = os.path.join(dist_dir, "README.md")
@@ -379,10 +397,10 @@ For issues or questions, check the application logs and ensure:
 
 def main():
     """Main build function"""
-    print("🚀 SharePoint Automation Manual EXE Builder")
+    print("🚀 SharePoint Automation Universal EXE Builder")
     print("=" * 60)
-    print("This will create an EXE for manual mode while keeping")
-    print("automated mode as batch files for task scheduler.")
+    print("This will create ONE EXE that works for both manual and")
+    print("automated modes with smart detection.")
     print("=" * 60)
     
     # Check if we're in the project root
@@ -418,17 +436,16 @@ def main():
     if os.path.exists('build'):
         shutil.rmtree('build')
     
-    # Create launcher and version file
-    create_manual_launcher()
+    # Create version file
     create_version_file()
     
-    print("\n🔨 Building Manual Mode EXE...")
+    print("\n🔨 Building Universal EXE...")
     
-    # Build manual EXE
-    manual_success = build_manual_exe()
+    # Build single EXE
+    success = build_single_exe()
     
     # Clean up build artifacts
-    cleanup_files = ['build', 'manual_launcher.py', 'version_info.txt']
+    cleanup_files = ['build', 'version_info.txt']
     for item in cleanup_files:
         if os.path.exists(item):
             if os.path.isdir(item):
@@ -437,45 +454,49 @@ def main():
                 os.remove(item)
     
     # Clean up spec file
-    if os.path.exists('SharePointAutomation-Manual.spec'):
-        os.remove('SharePointAutomation-Manual.spec')
+    if os.path.exists('SharePointAutomation.spec'):
+        os.remove('SharePointAutomation.spec')
     
     print("\n" + "=" * 60)
-    if manual_success:
-        print("🎉 Manual EXE build completed successfully!")
+    if success:
+        print("🎉 Universal EXE build completed successfully!")
         
         # Create distribution package
         print("\n📦 Creating distribution package...")
         create_distribution_package()
         
         print(f"\n📁 Generated files:")
-        if os.path.exists('dist/SharePointAutomation-Manual.exe'):
-            size_manual = os.path.getsize('dist/SharePointAutomation-Manual.exe') / (1024*1024)
-            print(f"   - dist/SharePointAutomation-Manual.exe ({size_manual:.1f} MB)")
+        if os.path.exists('dist/SharePointAutomation.exe'):
+            size = os.path.getsize('dist/SharePointAutomation.exe') / (1024*1024)
+            print(f"   - dist/SharePointAutomation.exe ({size:.1f} MB)")
         
         print(f"\n📋 Usage:")
-        print(f"   Manual Mode:")
-        print(f"   - Double-click SharePointAutomation-Manual.exe")
-        print(f"   - GUI interface with settings and date selection")
+        print(f"   Manual Mode (GUI):")
+        print(f"   - Double-click SharePointAutomation.exe")
+        print(f"   - Or run: SharePointAutomation.exe --manual")
         print(f"   ")
-        print(f"   Automated Mode (Task Scheduler):")
-        print(f"   - Use run_sharepoint_automation.bat")
-        print(f"   - Requires Python environment setup")
-        print(f"   - Configure via Task Scheduler")
+        print(f"   Auto Mode (Task Scheduler):")
+        print(f"   - SharePointAutomation.exe --auto")
+        print(f"   - Or just SharePointAutomation.exe (auto-detects)")
+        print(f"   ")
+        print(f"   Smart Detection:")
+        print(f"   - Double-click → Manual mode")
+        print(f"   - Task Scheduler → Auto mode")
+        print(f"   - Command line → Auto mode")
         
         print(f"\n📦 Distribution:")
-        print(f"   - Complete package available in: SharePoint_Automation_Distribution/")
+        print(f"   - Complete package: SharePoint_Automation_Distribution/")
         print(f"   - Copy entire folder to target machines")
-        print(f"   - Manual EXE requires no additional setup")
-        print(f"   - Automated mode requires Python (use setup script)")
+        print(f"   - Universal EXE requires no additional setup")
+        print(f"   - Works for both manual and automated use")
         
     else:
         print("❌ Build failed. Check the error messages above.")
         print(f"\n🔧 Troubleshooting tips:")
         print(f"   - Make sure all dependencies are installed")
         print(f"   - Check that you're in the project root directory")
+        print(f"   - Ensure single_launcher.py exists")
         print(f"   - Try running: pip install -r requirements.txt")
-        print(f"   - Ensure PyQt5 and win32com are properly installed")
 
 if __name__ == "__main__":
     main()
